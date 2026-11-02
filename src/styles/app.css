@@ -113,6 +113,10 @@ input[type=range]{width:100%;accent-color:#0A66D8;margin:0;height:22px}
 .pane-ed{min-width:0;display:flex;flex-direction:column;background:#FFFFFF}
 .pane-pv{flex:1 1 0;min-width:0;position:relative;display:flex}
 .pv-scroll{--pad-b:200px;flex:1 1 auto;overflow:auto;position:relative;padding:92px clamp(20px,6%,80px) var(--pad-b)}
+.art-hint,.art .lv .cm-placeholder,.ed .cm-placeholder{color:rgba(60,60,67,.32)}
+.art-hint{margin:0;cursor:text}
+.th-paper .art-hint,.th-paper .art .lv .cm-placeholder{color:rgba(90,60,20,.36)}
+.th-night .art-hint,.th-night .art .lv .cm-placeholder{color:rgba(235,235,245,.28)}
 
 /* The source editor: CodeMirror styled as the prototype's .ed rows. */
 .ed{flex:1 1 auto;min-height:0;position:relative;font-family:'SF Mono',Menlo,'JetBrains Mono','PingFang SC',ui-monospace,monospace;font-size:13px;line-height:24px;cursor:text}

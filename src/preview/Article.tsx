@@ -3,6 +3,7 @@ import type { Block, ParsedDocument } from "../markdown/parse";
 import type { Prefs } from "../platform";
 import { BlockActionsContext, type BlockActions } from "./actions";
 import { BlockView } from "./Blocks";
+import { WRITE_HERE } from "../editor/SourceEditor";
 import { articleItems, type LineRange } from "./layout";
 
 export type Typography = Pick<Prefs, "mw" | "fs" | "lh" | "pg" | "ff">;
@@ -12,6 +13,8 @@ export interface LiveEditing {
   editor: ReactNode;
   /** block is null for a click on no block, which only an empty document acts on. */
   onActivate(block: Block | null, e: MouseEvent): void;
+  /** A click on the page outside the article. */
+  onBlank(): void;
   onKeyDown(e: KeyboardEvent<HTMLElement>): void;
 }
 
@@ -63,6 +66,7 @@ export const Article = memo(function Article({ doc, typography, focus, actions, 
         }}
       >
         {items.map((it) => (it.type === "editor" ? <Fragment key="editor">{live!.editor}</Fragment> : <BlockView key={it.key} block={it.block} />))}
+        {live && !live.range && !doc.blocks.length && <p className="art-hint">{WRITE_HERE}</p>}
       </article>
     </BlockActionsContext.Provider>
   );

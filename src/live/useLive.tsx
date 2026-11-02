@@ -4,7 +4,7 @@ import { blockLabel } from "../app/labels";
 import { blockAtLine, type Block, type ParsedDocument } from "../markdown/parse";
 import { deleteLines, replaceLines, sliceLines } from "../markdown/source";
 import { alignments, columnAt, insertColumn, insertRow, setAlign } from "../markdown/table";
-import type { Cursor } from "../editor/SourceEditor";
+import { WRITE_HERE, type Cursor } from "../editor/SourceEditor";
 import type { LiveEditing } from "../preview/Article";
 import type { LineRange } from "../preview/layout";
 import { renderedPrefixAt, sourceOffsetFor } from "./caret";
@@ -107,6 +107,12 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
     activate(block, prefix == null ? "end" : sourceOffsetFor(src, prefix));
   };
 
+  // A click on the page around the blocks writes at the end, as below the last line.
+  const onBlank = () => {
+    const last = latest.current.doc.blocks.at(-1);
+    activate(last ?? whole(), "end");
+  };
+
   const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     if (e.target !== e.currentTarget || current.current || (e.key !== "ArrowDown" && e.key !== "ArrowUp")) return;
     e.preventDefault();
@@ -126,7 +132,7 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
     if (b) activate(b, dir < 0 ? "end" : "start");
   };
 
-  if (!active) return { live: { range: null, editor: null, onActivate, onKeyDown }, label: null, editTable };
+  if (!active) return { live: { range: null, editor: null, onActivate, onBlank, onKeyDown }, label: null, editTable };
 
   const block = blockWithin(doc.blocks, active);
   const source = sliceLines(text, active.start, active.end);
@@ -148,6 +154,7 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
   const live: LiveEditing = {
     range: active,
     onActivate,
+    onBlank,
     onKeyDown,
     editor: (
       <LiveEditor
@@ -159,6 +166,7 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
         showLineNumbers={showLineNumbers}
         assist={assist}
         tools={tools}
+        hint={doc.blocks.length ? undefined : WRITE_HERE}
         onChange={replace}
         onExit={onExit}
         onCursor={(line, ch) => {

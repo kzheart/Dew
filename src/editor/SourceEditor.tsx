@@ -7,11 +7,15 @@ import {
   highlightActiveLineGutter,
   keymap,
   lineNumbers,
+  placeholder,
 } from "@codemirror/view";
 import { useEffect, useLayoutEffect, useRef, type Ref } from "react";
 import { diff } from "../markdown/source";
 import { inlineRender, renderExtensions } from "./render";
 import { markdownSyntax } from "./syntax";
+
+/** What an empty document shows where its first line goes. */
+export const WRITE_HERE = "开始书写，或输入 / 插入标题、列表、代码块…";
 
 export interface Cursor {
   line: number;
@@ -56,6 +60,7 @@ export function SourceEditor({ text, inline, focus, wide, initialCursor, assist 
         doc: text,
         extensions: [
           lineNumbers(),
+          placeholder(WRITE_HERE),
           highlightActiveLine(),
           highlightActiveLineGutter(),
           history(),

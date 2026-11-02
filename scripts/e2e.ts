@@ -347,6 +347,45 @@ async function documentChecks() {
     await waitFor("keep mine", async () => (await isSaved(page)) && !(await page<boolean>(`return !!document.querySelector(".gtitle")`)));
     check("保留我的 writes the page's text over the other app's and puts the title glass away", (await readFile(file, "utf8")).includes("- [ ] 分栏像素级同步滚动"));
   });
+
+  // A blank document says where to write, and a click anywhere on the page writes there.
+  const blank = join(work, "空白.md");
+  await writeFile(blank, "");
+  await session(blank, async ({ page, capture }) => {
+    const HINT = "开始书写，或输入 / 插入标题、列表、代码块…";
+    const state = () =>
+      page<{ editing: boolean; placeholder: string; hint: string; line: string | null }>(`return {
+        editing: !!document.querySelector(".act .cm-content"),
+        placeholder: document.querySelector(".act .cm-placeholder")?.textContent ?? "",
+        hint: document.querySelector(".art-hint")?.textContent ?? "",
+        line: document.querySelector(".act")?.dataset.line ?? null,
+      }`);
+    const clickBlank = () =>
+      page(`const s = document.querySelector(".pv-scroll"), r = s.getBoundingClientRect();
+        s.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: r.left + 30, clientY: r.bottom - 60 }))`);
+
+    const opened = await waitFor("the placeholder", async () => ((await state()).placeholder === HINT ? state() : null)).catch(state);
+    check("a blank document opens with the caret on its first line and a hint where the text goes", opened.editing && opened.placeholder === HINT, JSON.stringify(opened));
+    await capture("e2e-blank");
+
+    await page(`document.querySelector(".act .cm-content").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))`);
+    const left = await waitFor("the page hint", async () => ((await state()).hint === HINT ? state() : null)).catch(state);
+    check("leaving the blank document keeps the hint on the page", !left.editing && left.hint === HINT, JSON.stringify(left));
+
+    await clickBlank();
+    const back = await waitFor("the editor", async () => ((await state()).editing ? state() : null)).catch(state);
+    check("a click on the blank page beside the column starts writing", back.editing, JSON.stringify(back));
+
+    await page(`const v = document.querySelector(".act .cm-content").cmTile.root.view; v.dispatch(v.state.replaceSelection("第一段\\n\\n第二段"))`);
+    const typed = await waitFor("the text", async () => ((await page<string>(`return await mygo.call("Doc.Content")`)) === "第一段\n\n第二段" ? state() : null)).catch(state);
+    check("typing replaces the hint", typed.placeholder === "" && typed.hint === "", JSON.stringify(typed));
+
+    await page(`document.querySelector(".act .cm-content").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))`);
+    await waitFor("the rendered blocks", async () => !(await state()).editing);
+    await clickBlank();
+    const below = await waitFor("the last block", async () => ((await state()).line ? state() : null)).catch(state);
+    check("a click below the text edits the last block", below.line === "3", JSON.stringify(below));
+  });
 }
 
 /** 超级代码块.md: code blocks, diffs, diagrams and their toolbars. */

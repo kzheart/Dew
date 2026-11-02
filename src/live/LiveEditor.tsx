@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { EditorState, Prec, StateField, type Extension } from "@codemirror/state";
-import { Decoration, drawSelection, EditorView, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
+import { Decoration, drawSelection, EditorView, keymap, lineNumbers, placeholder, type DecorationSet } from "@codemirror/view";
 import { useLayoutEffect, useRef, type HTMLAttributes, type ReactNode } from "react";
 import { liveTokens, renderExtensions, tokenClasses } from "../editor/render";
 import { external } from "../editor/SourceEditor";
@@ -21,6 +21,8 @@ interface Props {
   /** Typing aids shared with the source editor; they take keys before the block's own. */
   assist?: Extension;
   tools?: ReactNode;
+  /** Shown while the editor is empty, which is the whole document when it has no blocks. */
+  hint?: string;
   onChange(src: string): void;
   /** -1 or 1 to move to the block above or below, 0 to leave. */
   onExit(dir: -1 | 0 | 1): void;
@@ -97,7 +99,7 @@ function textShell(block: Block | null): HTMLAttributes<HTMLDivElement> {
 }
 
 /** The active block of live mode: its source in a small CodeMirror, in place of the rendered block. */
-export function LiveEditor({ block, source, firstLine, caret, showLineNumbers, assist = [], tools, onChange, onExit, onCursor }: Props) {
+export function LiveEditor({ block, source, firstLine, caret, showLineNumbers, assist = [], tools, hint, onChange, onExit, onCursor }: Props) {
   const host = useRef<HTMLDivElement | null>(null);
   const view = useRef<EditorView | null>(null);
   const callbacks = useRef({ onChange, onExit, onCursor });
@@ -117,6 +119,7 @@ export function LiveEditor({ block, source, firstLine, caret, showLineNumbers, a
           history(),
           drawSelection(),
           liveSyntax(),
+          hint ? placeholder(hint) : [],
           renderExtensions,
           tokenClasses.of(liveTokens),
           shell === "code" ? codeExtensions(showLineNumbers) : EditorView.lineWrapping,

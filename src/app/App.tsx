@@ -344,6 +344,9 @@ export function App({ initial }: { initial: Initial }) {
                 updateToc();
                 sync.fromPreview();
               }}
+              onClick={(e) => {
+                if (e.target === e.currentTarget && live && window.getSelection()?.isCollapsed !== false) live.onBlank();
+              }}
             >
               <Article doc={parsed} typography={prefs} focus={focus} actions={actions} live={live} onLocate={locate} articleRef={articleRef} />
             </div>
