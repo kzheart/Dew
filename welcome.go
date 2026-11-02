@@ -81,8 +81,8 @@ func (w *welcome) show() {
 	})
 }
 
-// replaceWith closes the welcome window for doc, a document window that
-// opened in no tab group, which takes its frame.
+// replaceWith gives the welcome window's frame to doc, a document window
+// that opened in no tab group, and closes the welcome window as doc shows.
 func (w *welcome) replaceWith(doc *mygo.Window) {
 	if w.win == nil {
 		return
@@ -90,5 +90,13 @@ func (w *welcome) replaceWith(doc *mygo.Window) {
 	win := w.win
 	w.win = nil
 	doc.SetBounds(win.Bounds())
-	win.Close()
+	if doc.IsVisible() {
+		win.Close()
+		return
+	}
+	var off func()
+	off = doc.OnShow(func() {
+		off()
+		win.Close()
+	})
 }

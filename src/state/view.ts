@@ -38,9 +38,3 @@ export function viewReducer(s: ViewState, a: ViewAction): ViewState {
   }
 }
 
-export const modeLabels: Record<Mode, string> = {
-  live: "实时编辑",
-  preview: "预览",
-  edit: "源码",
-  split: "源码 · 分栏",
-};

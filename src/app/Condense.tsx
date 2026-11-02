@@ -1,12 +1,22 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-const FLIGHT = 360;
-const CLEAR = 540;
+const FLIGHT = 300;
+const CLEAR = 450;
 
-/** Where a box's point lies, as window coordinates. */
+/** Where a box's point lies, as window coordinates, once the page's entrance animations moved it home (they run in main). */
 function at(sel: string, pick: (r: DOMRect) => [number, number]): [number, number] | null {
-  const r = document.querySelector(sel)?.getBoundingClientRect();
-  return r && r.width + r.height > 0 ? pick(r) : null;
+  const el = document.querySelector(sel);
+  const r = el?.getBoundingClientRect();
+  if (!el || !r || r.width + r.height === 0) return null;
+  let [x, y] = pick(r);
+  for (let a = el.parentElement; a && a.closest("main"); a = a.parentElement) {
+    const t = getComputedStyle(a).transform;
+    if (t === "none") continue;
+    const m = new DOMMatrixReadOnly(t);
+    x -= m.m41;
+    y -= m.m42;
+  }
+  return [x, y];
 }
 
 /**
@@ -21,7 +31,6 @@ export function Condense({ onDone }: { onDone(): void }) {
   useEffect(() => {
     const el = root.current!;
     let live = true;
-    let done: ReturnType<typeof setTimeout> | undefined;
     let raf = requestAnimationFrame(() => {
       const w = window.innerWidth;
       const h = window.innerHeight;
@@ -61,8 +70,7 @@ export function Condense({ onDone }: { onDone(): void }) {
           const t = Math.min(1, (now - start) / CLEAR);
           el.style.setProperty("--r", `${(far + 70) * (1 - (1 - t) ** 3) - 70}px`);
           if (t < 1) raf = requestAnimationFrame(clear);
-          // Stays a moment longer, so the drop falling into the dock finishes on its delay.
-          else done = setTimeout(onDone, 260);
+          else onDone();
         };
         raf = requestAnimationFrame(clear);
       };
@@ -70,7 +78,6 @@ export function Condense({ onDone }: { onDone(): void }) {
     return () => {
       live = false;
       cancelAnimationFrame(raf);
-      clearTimeout(done);
     };
   }, []);
 
@@ -81,4 +88,23 @@ export function Condense({ onDone }: { onDone(): void }) {
       <span ref={drop} className="cd-drop" />
     </div>
   );
+}
+
+/**
+ * The vapor a closed tab left, over the tab shown in its place: it lifts once this page is the one shown,
+ * and goes when the page stays in the background.
+ */
+export function Haze({ onDone }: { onDone(): void }) {
+  const [lifting, setLifting] = useState(!document.hidden);
+  useEffect(() => {
+    const shown = () => !document.hidden && setLifting(true);
+    document.addEventListener("visibilitychange", shown);
+    // Long enough to outlast the closing page's vapor, which goes on before its window does.
+    const t = setTimeout(() => document.hidden && onDone(), 1000);
+    return () => {
+      document.removeEventListener("visibilitychange", shown);
+      clearTimeout(t);
+    };
+  }, []);
+  return <span className={lifting ? "haze lifting" : "haze"} aria-hidden="true" onAnimationEnd={onDone} />;
 }

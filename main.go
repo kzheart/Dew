@@ -59,6 +59,11 @@ var bindE2E []func(*filesService)
 func newDocumentWindow(files *filesService, welcome *welcome, doc *mygo.Document[string]) *mygo.Window {
 	// Before the window exists, which takes the focus as it shows.
 	host := files.host()
+	// A window that takes another's place, a tab in its group or the
+	// welcome window, shows once its page drew (Files.Shown) and the other
+	// steps aside in the same moment: shown first, it flashes a blank page,
+	// and a tab the native tab bar.
+	waits := host != nil || welcome.win != nil
 	win := mygo.NewWindow(mygo.WindowOptions{
 		URL:                  "/",
 		Width:                1280,
@@ -69,10 +74,11 @@ func newDocumentWindow(files *filesService, welcome *welcome, doc *mygo.Document
 		TrafficLightPosition: &mygo.Point{X: 20, Y: 24},
 		BackgroundColor:      "#FFFFFF",
 		StateKey:             "document",
+		Hidden:               waits,
 	})
 	unlockFrameRate(win)
 	shareCardOnContextMenu(win)
-	files.adopt(win, host, doc)
+	files.adopt(win, host, doc, waits)
 	if host == nil {
 		welcome.replaceWith(win)
 	}

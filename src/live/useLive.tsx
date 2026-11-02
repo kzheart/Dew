@@ -1,6 +1,5 @@
 import type { Extension } from "@codemirror/state";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from "react";
-import { blockLabel } from "../app/labels";
 import { blockAtLine, type Block, type ParsedDocument } from "../markdown/parse";
 import { deleteLines, replaceLines, sliceLines } from "../markdown/source";
 import { alignments, columnAt, insertColumn, insertRow, setAlign } from "../markdown/table";
@@ -27,14 +26,17 @@ interface Options {
 
 /** Live mode: which block is being edited, and the handlers that move between blocks. */
 export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, assist, article, onCaret }: Options) {
-  const [active, setActive] = useState<Active | null>(null);
+  // A blank document starts with its caret on the first line, rather than swapping its hint for the editor after a render.
+  const [active, setActive] = useState<Active | null>(() =>
+    enabled && doc.blocks.length === 0 ? { start: 1, end: Math.max(1, doc.lineCount), caret: "start", key: 1 } : null,
+  );
   const [cursor, setCursor] = useState({ line: 0, ch: 0 });
   // Editor events arrive between renders, so handlers read the latest values from refs.
-  const current = useRef<Active | null>(null);
+  const current = useRef<Active | null>(active);
   const latest = useRef({ doc, text });
   latest.current = { doc, text };
-  const keys = useRef(0);
-  const lastLine = useRef<number | null>(null);
+  const keys = useRef(active ? 1 : 0);
+  const lastLine = useRef<number | null>(active?.start ?? null);
 
   const whole = () => ({ start: 1, end: Math.max(1, latest.current.doc.lineCount) });
   const set = (a: Active | null) => {
@@ -92,7 +94,7 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
     [edit],
   );
 
-  if (!enabled) return { live: null, label: null, editTable };
+  if (!enabled) return { live: null, editTable };
 
   const onActivate = (block: Block | null, e: MouseEvent) => {
     const target = e.target as Element;
@@ -132,7 +134,7 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
     if (b) activate(b, dir < 0 ? "end" : "start");
   };
 
-  if (!active) return { live: { range: null, editor: null, onActivate, onBlank, onKeyDown }, label: null, editTable };
+  if (!active) return { live: { range: null, editor: null, onActivate, onBlank, onKeyDown }, editTable };
 
   const block = blockWithin(doc.blocks, active);
   const source = sliceLines(text, active.start, active.end);
@@ -176,5 +178,5 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
       />
     ),
   };
-  return { live, label: block ? blockLabel(block) : "段落", editTable };
+  return { live, editTable };
 }

@@ -19,7 +19,7 @@ import { fileName } from "../state/recent";
 import { glassStyle } from "../state/settings";
 import { modeOf, viewReducer, type ViewState } from "../state/view";
 import { Divider, StatusBar, Toc } from "./Chrome";
-import { Condense } from "./Condense";
+import { Condense, Haze } from "./Condense";
 import { Dock } from "./Dock";
 import { Header, type ExportAction, type Popover } from "./Header";
 import { useDebouncedEffect, usePresence } from "./hooks";
@@ -46,11 +46,15 @@ export interface Initial {
 
 export function App({ initial }: { initial: Initial }) {
   const doc = useDocument(initial);
-  const files = useFiles(initial.files);
+  const [hazy, setHazy] = useState(false);
+  const files = useFiles(initial.files, () => setHazy(true));
   const joined = initial.files.length > 1;
-  const [condensing, setCondensing] = useState(
-    () => joined && !initial.text && !!initial.files.find((f) => f.current)?.untitled && !matchMedia("(prefers-reduced-motion: reduce)").matches,
+  // A new, blank file's page, as a tab or in the welcome window's place: a drop condenses it, and a dock that waits for the drop.
+  const [fresh] = useState(
+    () => !initial.text && !!initial.files.find((f) => f.current)?.untitled && !matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
+  const [condensing, setCondensing] = useState(fresh);
+  const [evaporating, setEvaporating] = useState(false);
   const recent = useRecent();
   const [prefs, setPrefs] = useState(initial.prefs);
   const [view, dispatch] = useReducer(viewReducer, {
@@ -214,7 +218,7 @@ export function App({ initial }: { initial: Initial }) {
     [notify, flush, prefs.slash, prefs.pairs],
   );
 
-  const { live, label: liveLabel, editTable } = useLive({
+  const { live, editTable } = useLive({
     enabled: isLive,
     doc: parsed,
     text: doc.text,
@@ -305,6 +309,20 @@ export function App({ initial }: { initial: Initial }) {
     }
   };
   useEffect(() => host.onCommand((c) => onCommand.current(c)), []);
+  useEffect(() => {
+    void host.files.shown().catch(() => {});
+  }, []);
+
+  // The page closing its own file goes up as vapor first; one that asks to be saved closes at once, for its sheet.
+  const closeFile = (id: number) => {
+    const f = files.find((x) => x.id === id);
+    const close = () => void host.files.close(id).catch(() => setEvaporating(false));
+    if (!f?.current || f.edited || matchMedia("(prefers-reduced-motion: reduce)").matches) return close();
+    setEvaporating(true);
+    // The tab shown in this one's place learns of it now, while in the background, and takes the same vapor.
+    void host.files.leave().catch(() => {});
+    setTimeout(close, 420);
+  };
 
   useEffect(() => {
     const sync = () => host.syncView({ mode, focus, inline: prefs.inline });
@@ -316,7 +334,7 @@ export function App({ initial }: { initial: Initial }) {
   const theme = showEd && !isSplit ? "" : prefs.bg === "night" ? " th-night" : prefs.bg === "paper" ? " th-paper" : "";
 
   return (
-    <div style={glassStyle(prefs.glass)} className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}${setting ? " set-on" : ""}${joined ? " joined" : ""}${condensing ? " condensing" : ""}`}>
+    <div style={glassStyle(prefs.glass)} className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}${setting ? " set-on" : ""}${joined ? " joined" : ""}${fresh ? " fresh" : ""}${evaporating ? " evaporating" : ""}`}>
       <main className="main">
         {showEd && (
           <section className="pane-ed" aria-label="源码编辑" style={{ flex: isSplit ? `0 0 ${split}%` : "1 1 auto" }}>
@@ -360,6 +378,8 @@ export function App({ initial }: { initial: Initial }) {
       </main>
       <div className="edge" aria-hidden="true" />
       {condensing && <Condense onDone={() => setCondensing(false)} />}
+      {evaporating && <span className="vapor" aria-hidden="true" />}
+      {hazy && <Haze onDone={() => setHazy(false)} />}
       <Header
         doc={doc.state}
         view={view}
@@ -396,11 +416,11 @@ export function App({ initial }: { initial: Initial }) {
         <ShareCard content={lastCard.current} prefs={prefs} fileName={docName} leaving={sharing.leaving} onPrefs={updatePrefs} onClose={closeCard} />
       )}
       <Toasts toasts={toasts.toasts} onDismiss={toasts.dismiss} />
-      <StatusBar chars={parsed.stats.chars} minutes={parsed.stats.minutes} mode={mode} cursor={cursor} blockLabel={liveLabel} />
+      <StatusBar chars={parsed.stats.chars} mode={mode} cursor={showEd || live?.range ? cursor : null} />
       <Dock
         files={files}
         onSelect={(id) => void host.files.select(id).catch(() => {})}
-        onClose={(id) => void host.files.close(id).catch(() => {})}
+        onClose={closeFile}
         onNew={() => void host.files.new().catch(() => {})}
         onOverview={openOverview}
       />

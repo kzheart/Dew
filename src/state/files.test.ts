@@ -17,9 +17,8 @@ test("each tear state reads as a status", () => {
   expect(fileStatus(tab(1, { untitled: true }))).toBe("尚未保存到磁盘");
 });
 
-test("a file that joins the group is born", () => {
+test("a file that joins the group neither ripples nor closes", () => {
   const c = changes([tab(1), tab(2)], [tab(1), tab(3, { untitled: true }), tab(2)]);
-  expect(c.born).toEqual([3]);
   expect(c.saved).toEqual([]);
   expect(c.closed).toEqual([]);
 });
@@ -40,7 +39,6 @@ test("a file that leaves the group is closed where it stood", () => {
   const two = tab(2, { edited: true });
   const c = changes([tab(1), two, tab(3)], [tab(1), tab(3)]);
   expect(c.closed).toEqual([{ tab: two, index: 1 }]);
-  expect(c.born).toEqual([]);
 });
 
 test("closed files stay in place while they fade out", () => {

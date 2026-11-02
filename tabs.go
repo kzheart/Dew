@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/egoist/mygo"
 )
@@ -36,7 +38,21 @@ var Files = mygo.NewEvent[[]FileTab]("files")
 type filesService struct {
 	docs   *mygo.Documents[string]
 	recent *recentService
+
+	mu sync.Mutex
+	// unlisted holds the tabs the rest of their group does not list: one
+	// joining, created hidden until its page drew, and one leaving, whose
+	// page goes up as vapor before it closes. The tab shown in a leaving
+	// one's place learns of it while still in the background.
+	unlisted map[*mygo.Window]listing
 }
+
+type listing int
+
+const (
+	joining listing = iota + 1
+	leaving
+)
 
 // List returns the documents of the calling window's tab group, in tab
 // order.
@@ -65,6 +81,59 @@ func (s *filesService) Close(ctx context.Context, id int) error {
 	}
 	w.Close()
 	return nil
+}
+
+// Shown shows the calling window once its page drew: a tab that joins a
+// group waits for it, so it never shows a page still loading.
+func (s *filesService) Shown(ctx context.Context) {
+	s.show(mygo.CallerWindow(ctx))
+}
+
+// show shows win as the selected tab of its group, once, if it waits to.
+func (s *filesService) show(win *mygo.Window) {
+	if !s.joined(win) {
+		return
+	}
+	hideTabBar(win)
+	selectTab(win)
+	s.refresh()
+}
+
+// Leave takes the calling window's tab off its group's list, as its page
+// starts to close it.
+func (s *filesService) Leave(ctx context.Context) {
+	s.setListing(mygo.CallerWindow(ctx), leaving)
+	s.refresh()
+}
+
+// joined ends win's wait to join its group, reporting whether it waited.
+func (s *filesService) joined(win *mygo.Window) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	waited := s.unlisted[win] == joining
+	if waited {
+		delete(s.unlisted, win)
+	}
+	return waited
+}
+
+func (s *filesService) setListing(win *mygo.Window, l listing) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.unlisted == nil {
+		s.unlisted = map[*mygo.Window]listing{}
+	}
+	if l == 0 {
+		delete(s.unlisted, win)
+	} else {
+		s.unlisted[win] = l
+	}
+}
+
+func (s *filesService) listed(win *mygo.Window) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.unlisted[win] == 0
 }
 
 // New opens an untitled document, as a tab of the focused group.
@@ -100,7 +169,7 @@ func (s *filesService) tabs(win *mygo.Window) []FileTab {
 	tabs := []FileTab{}
 	for _, w := range tabGroup(win) {
 		d := s.docs.ForWindow(w)
-		if d == nil {
+		if d == nil || w != win && !s.listed(w) {
 			continue
 		}
 		st := d.State()
@@ -134,9 +203,15 @@ func (s *filesService) host() *mygo.Window {
 }
 
 // adopt makes win, which shows doc, a tab of host's group, and keeps the
-// group's docks and the recent files up to date. Its first list goes out
+// group's docks and the recent files up to date. A win that waits to show
+// stays off the group's list until its page drew. Its first list goes out
 // once mygo attached doc to win and told its state.
-func (s *filesService) adopt(win, host *mygo.Window, doc *mygo.Document[string]) {
+func (s *filesService) adopt(win, host *mygo.Window, doc *mygo.Document[string], waits bool) {
+	if waits {
+		s.setListing(win, joining)
+		// A page that fails before it draws still shows, for the user to close.
+		time.AfterFunc(2*time.Second, func() { s.show(win) })
+	}
 	joinTabGroup(win, host)
 	// The window outlives the document's state: mygo detaches it first.
 	path := ""
@@ -148,6 +223,7 @@ func (s *filesService) adopt(win, host *mygo.Window, doc *mygo.Document[string])
 		s.refresh()
 	})
 	win.OnClosed(func() {
+		s.setListing(win, 0)
 		s.recent.closedWindow(win, path)
 		s.refresh()
 	})

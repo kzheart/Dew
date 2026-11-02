@@ -25,8 +25,6 @@ export interface Closed {
 
 /** What the dock animates as the group's list changes. */
 export interface Changes {
-  /** Files that joined the group. */
-  born: number[];
   /** Files whose unsaved edits were just saved. */
   saved: number[];
   closed: Closed[];
@@ -36,7 +34,6 @@ export function changes(prev: FileTab[], next: FileTab[]): Changes {
   const before = new Map(prev.map((t) => [t.id, t]));
   const after = new Set(next.map((t) => t.id));
   return {
-    born: next.filter((t) => !before.has(t.id)).map((t) => t.id),
     saved: next.filter((t) => {
       const was = before.get(t.id);
       return was && dropState(was) === "dirty" && dropState(t) === "saved";

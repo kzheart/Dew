@@ -3,7 +3,7 @@ import { host, type FileTab } from "../platform";
 import { changes, withClosed, type Closed } from "../state/files";
 
 export interface ShownFile extends FileTab {
-  /** Just joined the group: its drop falls into the dock. */
+  /** The page's own file, just joined to its group: its drop falls into the dock. A page never sees another file join, as a file joins in its own tab. */
   born: boolean;
   /** Its edits were just saved: a ring ripples off its tear. */
   ripple: boolean;
@@ -31,22 +31,30 @@ function useMarks<T>(ms: number): [T[], (items: T[]) => void] {
   return [items, add];
 }
 
-/** The files of the window's tab group, as the dock and the light table show them. */
-export function useFiles(initial: FileTab[]): ShownFile[] {
+/**
+ * The files of the window's tab group, as the dock and the light table show them.
+ * onHandedOver hears of a file closing while this page is in the background: the page may be the tab shown in its place.
+ */
+export function useFiles(initial: FileTab[], onHandedOver?: () => void): ShownFile[] {
+  const handedOver = useRef(onHandedOver);
+  handedOver.current = onHandedOver;
   const [tabs, setTabs] = useState(initial);
   const last = useRef(initial);
-  const [born, addBorn] = useMarks<number>(1200);
+  // Kept for the page's life: a class that sets an animation restarts it when it comes off and on.
+  const born = initial.length > 1 ? initial.find((t) => t.current)?.id : undefined;
   const [saved, addSaved] = useMarks<number>(1150);
   const [closed, addClosed] = useMarks<Closed>(320);
 
   useEffect(() => {
-    // A file opened into a group drops into its dock as its page shows.
-    if (initial.length > 1) addBorn(initial.filter((t) => t.current).map((t) => t.id));
     const take = (next: FileTab[]) => {
       const c = changes(last.current, next);
       last.current = next;
       setTabs(next);
-      addBorn(c.born);
+      // A page in a background tab takes the change as is: it would show only the tail of an animation once it is selected.
+      if (document.hidden) {
+        if (c.closed.length) handedOver.current?.();
+        return;
+      }
       addSaved(c.saved);
       addClosed(c.closed);
     };
@@ -56,5 +64,5 @@ export function useFiles(initial: FileTab[]): ShownFile[] {
     return off;
   }, []);
 
-  return withClosed(tabs, closed).map((t) => ({ ...t, born: born.includes(t.id), ripple: saved.includes(t.id) }));
+  return withClosed(tabs, closed).map((t) => ({ ...t, born: t.id === born, ripple: saved.includes(t.id) }));
 }

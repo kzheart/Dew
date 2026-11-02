@@ -657,13 +657,22 @@ header.bar{transition:padding .45s cubic-bezier(.3,1.25,.45,1)}
 @keyframes dropFall{0%{transform:translateY(-130px) scale(.7,1.3);opacity:0}15%{opacity:1}58%{transform:translateY(0) scale(1.32,.7)}74%{transform:translateY(-5px) scale(.92,1.1)}100%{transform:none}}
 /* 凝露: a new file's page clears from a mist where its first drop lands */
 .condense{position:absolute;inset:0;z-index:13;pointer-events:none;--x:50%;--y:30%;--r:-70px}
-.cd-mist{position:absolute;inset:0;background:radial-gradient(circle,rgba(110,135,170,.16) 0 1.1px,transparent 1.6px) 0 0/11px 13px,radial-gradient(circle,rgba(110,135,170,.1) 0 .8px,transparent 1.3px) 5px 7px/17px 19px,rgba(226,232,241,.72);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);-webkit-mask-image:radial-gradient(circle at var(--x) var(--y),transparent var(--r),#000 calc(var(--r) + 70px));mask-image:radial-gradient(circle at var(--x) var(--y),transparent var(--r),#000 calc(var(--r) + 70px));animation:fadeIn .14s ease-out backwards}
-.th-paper .cd-mist{background-color:rgba(232,220,194,.72)}
-.th-night .cd-mist{background-color:rgba(48,50,56,.72)}
+.cd-mist,.vapor,.haze{position:absolute;inset:0;background:radial-gradient(circle,rgba(110,135,170,.16) 0 1.1px,transparent 1.6px) 0 0/11px 13px,radial-gradient(circle,rgba(110,135,170,.1) 0 .8px,transparent 1.3px) 5px 7px/17px 19px,rgba(226,232,241,.72);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px);-webkit-mask-image:radial-gradient(circle at var(--x) var(--y),transparent var(--r),#000 calc(var(--r) + 70px));mask-image:radial-gradient(circle at var(--x) var(--y),transparent var(--r),#000 calc(var(--r) + 70px));animation:fadeIn .14s ease-out backwards}
+.th-paper .cd-mist,.th-paper .vapor,.th-paper .haze{background-color:rgba(232,220,194,.72)}
+.th-night .cd-mist,.th-night .vapor,.th-night .haze{background-color:rgba(48,50,56,.72)}
 .cd-drop{position:absolute;left:-7px;top:-7px;width:14px;height:14px;border-radius:50%;opacity:0;background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.95) 0 18%,transparent 26%),radial-gradient(circle at 50% 60%,#4A97F0,#1E6FD6);box-shadow:0 3px 8px rgba(14,90,190,.3)}
 .cd-ring{position:absolute;left:-20px;top:-20px;width:40px;height:40px;border-radius:50%;border:1.5px solid rgba(10,102,216,.55);opacity:0}
-.app.condensing .pane-ed,.app.condensing .pane-pv,.app.condensing .art,.app.condensing .ed .cm-editor{animation:none}
-.app.condensing .dk.born .m18{animation-delay:.36s}
+/* Keyed on .fresh, which a page keeps: an animation property under a class that comes off restarts that animation. */
+.app.fresh .dk.on.born .m18{animation-delay:.3s}
+/* 化作水汽: a closing page blurs up into a mist, and its drop leaves the dock, before its window goes */
+.app.evaporating{pointer-events:none}
+.app.evaporating main{animation:evap .42s cubic-bezier(.4,0,.7,1) forwards}
+@keyframes evap{to{opacity:0;filter:blur(10px);transform:translateY(-18px) scale(.985)}}
+.vapor{z-index:13;pointer-events:none;-webkit-mask-image:none;mask-image:none;animation:fadeIn .42s ease-in backwards}
+.app.evaporating .dk.on{animation:dkGone .42s cubic-bezier(.4,0,.7,1) forwards}
+/* The tab shown in a closed one's place starts under the same vapor and clears it */
+.haze{z-index:13;pointer-events:none;-webkit-mask-image:none;mask-image:none;animation:none}
+.haze.lifting{animation:fadeOut .45s ease-out forwards}
 /* A tab that joins a group keeps the chrome its group already showed. */
 .app.joined header .gtitle,.app.joined header .seg-g,.app.joined header .srcg,.app.joined header .ig,.app.joined .stat,.app.joined .dock{animation:none}
 .dk.closing{animation:dkGone .32s ease both;pointer-events:none}

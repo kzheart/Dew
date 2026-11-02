@@ -18,3 +18,5 @@ func selectTab(win *mygo.Window) {
 	win.Show()
 	win.Focus()
 }
+
+func hideTabBar(win *mygo.Window) {}

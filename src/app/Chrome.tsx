@@ -1,7 +1,7 @@
-import { useState } from "react";
-import type { Heading } from "../markdown/parse";
+import { useEffect, useState } from "react";
+import { stats, type Heading } from "../markdown/parse";
 import { clampSplit, SPLIT_MAX, SPLIT_MIN } from "../state/scrollSync";
-import { modeLabels, type Mode } from "../state/view";
+import type { Mode } from "../state/view";
 
 export function Toc({ headings, active, pct, onJump }: {
   headings: Heading[];
@@ -36,23 +36,24 @@ export function Toc({ headings, active, pct, onJump }: {
   );
 }
 
-export function StatusBar({ chars, minutes, mode, cursor, blockLabel }: {
-  chars: number;
-  minutes: number;
-  mode: Mode;
-  cursor: { line: number; col: number } | null;
-  blockLabel: string | null;
-}) {
+/** The characters selected in the page or an editor, counted as the document's are. */
+function useSelectedChars(): number {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    const count = () => setN(stats(document.getSelection()?.toString() ?? "").chars);
+    document.addEventListener("selectionchange", count);
+    return () => document.removeEventListener("selectionchange", count);
+  }, []);
+  return n;
+}
+
+/** The document's length, or the selection's, and where the caret is. */
+export function StatusBar({ chars, mode, cursor }: { chars: number; mode: Mode; cursor: { line: number; col: number } | null }) {
+  const selected = useSelectedChars();
   return (
-    <footer className="glass stat" aria-label="文档状态">
-      <span>{chars.toLocaleString("zh-CN")} 字</span><span className="dot" />
-      <span>约 {minutes} 分钟</span><span className="dot" />
-      {(mode === "edit" || mode === "split") && cursor && (
-        <><span>行 {cursor.line}，列 {cursor.col}</span><span className="dot" /></>
-      )}
-      {mode === "live" && blockLabel && <><span>{blockLabel}</span><span className="dot" /></>}
-      {mode === "split" && <><span className="hide-sm">段落对齐同步</span><span className="dot hide-sm" /></>}
-      <span>{modeLabels[mode]}</span>
+    <footer className="glass stat" aria-label="文档状态" data-mode={mode}>
+      <span>{selected ? `已选 ${selected.toLocaleString("zh-CN")} 字` : `${chars.toLocaleString("zh-CN")} 字`}</span>
+      {cursor && <><span className="dot" /><span>行 {cursor.line}，列 {cursor.col}</span></>}
     </footer>
   );
 }

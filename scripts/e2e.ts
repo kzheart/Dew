@@ -190,16 +190,16 @@ async function documentChecks() {
     check("the header leaves room for the traffic lights", parseFloat(inset) > 0, `inset ${inset.trim()}`);
 
     const modes: [string, string, string][] = [
-      ["实时", "live", "实时编辑"],
-      ["预览", "preview", "预览"],
-      ["源码", "edit", "源码"],
-      ["源码分栏", "split", "源码 · 分栏"],
+      ["实时", "live", "live"],
+      ["预览", "preview", "preview"],
+      ["源码", "edit", "edit"],
+      ["源码分栏", "split", "split"],
     ];
-    for (const [item, name, label] of modes) {
+    for (const [item, name, mode] of modes) {
       await menu("视图", item);
       await settle();
-      const stat = await text(".stat");
-      check(`视图 › ${item} switches the mode`, stat.endsWith(label), stat);
+      const shown = await page<string>(`return document.querySelector(".stat").dataset.mode`);
+      check(`视图 › ${item} switches the mode`, shown === mode, `${shown}; ${await text(".stat")}`);
       await capture(`e2e-${name}`);
     }
 
@@ -269,6 +269,25 @@ async function documentChecks() {
     `);
     await settle();
     check("typing in live mode reaches Doc.content()", (await content()).includes(`真正对齐。${typed}`));
+    const caretStat = await text(".stat");
+    const heading = await page<string>(`
+      const h = document.querySelector("article h1");
+      const r = document.createRange();
+      r.selectNodeContents(h);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+      return h.textContent.replace(/\\s/g, "");
+    `);
+    const selectedStat = await waitFor("the status bar to count the selection", async () => {
+      const s = await text(".stat");
+      return s.startsWith("已选") && s;
+    }).catch(() => text(".stat"));
+    await page(`getSelection().removeAllRanges()`);
+    check(
+      "the status bar shows the count and caret while editing, and the selected count while text is selected",
+      /^[\d,]+ 字行 \d+，列 \d+$/.test(caretStat) && selectedStat.startsWith(`已选 ${heading.length} 字行 `),
+      `${caretStat}; ${selectedStat}`,
+    );
     const edited = await currentFile(page);
     check("the tear runs low and trembles while the document is edited", edited?.tear === "dirty" && edited.trembling && edited.tip === "版本说明.md，有未保存的修改", JSON.stringify(edited));
     await capture("e2e-live-typing");
@@ -972,7 +991,9 @@ async function tabChecks() {
 
     const opened = await s.windows();
     const sameBounds = opened.every((w) => JSON.stringify(w.bounds) === JSON.stringify(opened[0]!.bounds));
-    check("two files open as tabs of one window: the same bounds, one page shown", opened.length === 2 && sameBounds && (await shown()).length === 1, JSON.stringify({ bounds: opened.map((w) => w.bounds), shown: await shown() }));
+    // A tab that joins its group shows once its page drew.
+    const oneShown = !!(await settled("one page shown", async () => (await shown()).length === 1));
+    check("two files open as tabs of one window: the same bounds, one page shown", opened.length === 2 && sameBounds && oneShown, JSON.stringify({ bounds: opened.map((w) => w.bounds), shown: await shown() }));
     await checkTitleBars("with two files");
     const listed = await docks();
     check(
@@ -1048,6 +1069,10 @@ async function tabChecks() {
     const rippled = await top.s.page<boolean>(`return document.querySelector(".dk.on .tear").classList.contains("ripple")`);
     check("saving fills its tear again in both docks, with a ripple where it was saved", !!savedAll && rippled && (await readFile(join(dir, editedName), "utf8")).includes("多文件 e2e 输入。"), summary(savedAll || (await docks())));
 
+    // A page notes any file its dock animates, to show that one it is not showing animates none.
+    const watchDock = `window.e2eDockMarks = []; const dock = document.querySelector(".dock"); new MutationObserver(() => dock.getAnimations({ subtree: true }).forEach((a) => /^(dkBorn|dropFall|dkGone)$/.test(a.animationName) && window.e2eDockMarks.push(a.effect.target.closest(".dk").querySelector(".nm").textContent + " " + a.animationName))).observe(dock, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] })`;
+    const dockMarks = (id: number) => s.at(id).page<string[]>(`return [...new Set(window.e2eDockMarks)]`);
+    await top.s.page(watchDock);
     await top.s.page(`document.querySelector('.dock [aria-label="新建文件"]').click()`);
     const three = await settled("the new file's window", async () => {
       const ws = await s.windows();
@@ -1063,7 +1088,8 @@ async function tabChecks() {
       const ds = await docks();
       return ds.length === 3 && ds.every(({ files }) => files.length === 3 && files.some((f) => f.name === added?.title && f.tear === "empty")) && ds;
     });
-    const newShown = (await shown()).join() === String(added?.id);
+    // The new tab shows once its page drew.
+    const newShown = !!(await settled("the new file's window to show", async () => (await shown()).join() === String(added?.id)));
     check("新建文件 in the dock opens an untitled file as a new tab, an empty tear in every dock", !!withNew && newShown, summary(withNew || (await docks())));
     if (!added) return;
     // Its page clears from a mist where a drop lands on the first line, then leaves the page alone.
@@ -1071,6 +1097,12 @@ async function tabChecks() {
       s.at(added.id).page<boolean>(`return !document.querySelector("[data-condense]") && !!document.querySelector("main .art-hint, main .cm-placeholder")`),
     );
     check("a new file's page clears its mist and shows where to write", !!cleared, await s.at(added.id).page<string>(`return document.querySelector(".app").className`));
+    // Its entrance played under the mist; nothing replays once the mist is gone.
+    const entrances = `return document.getAnimations().map((a) => a.animationName).filter((n) => /^(paneIn|artA|artB|edIn|actGlow)$/.test(n))`;
+    const replayed = [...(await s.at(added.id).page<string[]>(entrances)), ...(await Bun.sleep(150).then(() => s.at(added.id).page<string[]>(entrances)))];
+    check("the new page's entrance does not play again after its mist clears", !replayed.length, replayed.join(", "));
+    const leftMarks = await dockMarks(top.win.id);
+    check("the page left for the new file does not animate it in its dock", !leftMarks.length, leftMarks.join(", "));
     await checkTitleBars("after a new file joins");
 
     const fresh = s.at(added.id);
@@ -1112,6 +1144,8 @@ async function tabChecks() {
 
     // An untitled file with text asks to be saved instead of closing; its text says what wrote it.
     const untitledText = await fresh.page<string>(`return await mygo.call("Doc.Content")`);
+    const behind = (await s.windows()).filter((w) => w.id !== added.id);
+    for (const w of behind) await s.at(w.id).page(watchDock);
     await fresh.page(`document.querySelector(".dk.on .dk-x").click()`);
     const closed = await settled("the untitled file to close", async () => {
       const ds = await docks();
@@ -1123,6 +1157,8 @@ async function tabChecks() {
       !!closed && !!shownAfter,
       closed ? summary(closed) : `${summary(await docks())}; untitled text ${JSON.stringify(untitledText)}`,
     );
+    const handedMarks = (await Promise.all(behind.map((w) => dockMarks(w.id)))).flat();
+    check("the pages behind a closing file take its leaving without animating it in their docks", !handedMarks.length, handedMarks.join(", "));
 
     // Dragging a page onto the light table's red zone closes its file.
     top = await front();

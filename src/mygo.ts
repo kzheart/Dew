@@ -241,6 +241,13 @@ export const Files = {
     return call("Files.Folder");
   },
   /**
+   * Leave takes the calling window's tab off its group's list, as its page
+   * starts to close it.
+   */
+  leave(): Promise<void> {
+    return call("Files.Leave");
+  },
+  /**
    * List returns the documents of the calling window's tab group, in tab
    * order.
    */
@@ -261,6 +268,13 @@ export const Files = {
   /** Select shows the document of the tab group's window id. */
   select(id: number): Promise<void> {
     return call("Files.Select", id);
+  },
+  /**
+   * Shown shows the calling window once its page drew: a tab that joins a
+   * group waits for it, so it never shows a page still loading.
+   */
+  shown(): Promise<void> {
+    return call("Files.Shown");
   },
 } as const;
 

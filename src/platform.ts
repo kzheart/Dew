@@ -25,6 +25,10 @@ export interface Host {
     select(id: number): Promise<void>;
     close(id: number): Promise<void>;
     "new"(): Promise<void>;
+    /** Shows the window once its page drew, for a tab that waits to join its group. */
+    shown(): Promise<void>;
+    /** Takes the window's tab off its group's list as the page starts to close it. */
+    leave(): Promise<void>;
     content(id: number): Promise<string>;
     /** Opens a Markdown file as a tab of the focused group. */
     open(path: string): Promise<void>;
@@ -140,6 +144,8 @@ async function browserHost(): Promise<Host> {
       },
       close: async () => {},
       new: async () => {},
+      shown: async () => {},
+      leave: async () => {},
       content: async (id) => {
         const p = paths[id - 1];
         return p === path ? text : p ? samples[p]!() : "";
