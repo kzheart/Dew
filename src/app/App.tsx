@@ -1,21 +1,24 @@
+import type { EditorView } from "@codemirror/view";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { flashLine, locateLine } from "../editor/render";
+import { SourceEditor, type Cursor } from "../editor/SourceEditor";
 import { parseDocument } from "../markdown/parse";
 import { toggleTask } from "../markdown/source";
 import { Article } from "../preview/Article";
 import type { BlockActions, CodeBlock } from "../preview/Blocks";
 import { host, type Command, type DocumentState, type Prefs } from "../platform";
 import { modeOf, viewReducer, type ViewState } from "../state/view";
-import { StatusBar, Toc } from "./Chrome";
+import { Divider, StatusBar, Toc } from "./Chrome";
 import { Header, type ExportAction, type Popover } from "./Header";
 import { useDebouncedEffect } from "./hooks";
 import { useDocument } from "./useDocument";
+import { useScrollSync } from "./useScrollSync";
 
 export interface Initial {
   text: string;
   state: DocumentState;
   prefs: Prefs;
 }
-
 
 export function App({ initial }: { initial: Initial }) {
   const doc = useDocument(initial);
@@ -29,6 +32,9 @@ export function App({ initial }: { initial: Initial }) {
   const [popover, setPopover] = useState<Popover | null>(null);
   const [compact, setCompact] = useState(false);
   const [toc, setToc] = useState<{ line: number | null; pct: number }>({ line: null, pct: 0 });
+  const [cursor, setCursor] = useState<Cursor | null>(null);
+  const [split, setSplit] = useState(50);
+  const edView = useRef<EditorView | null>(null);
 
   const dir = doc.state.path ? doc.state.path.slice(0, doc.state.path.lastIndexOf("/")) : "";
   const parsed = useMemo(() => parseDocument(doc.text, { resolveImage: (src) => resolveImage(src, dir) }), [doc.text, dir]);
@@ -43,6 +49,7 @@ export function App({ initial }: { initial: Initial }) {
   useDebouncedEffect({ ...prefs, base: view.base, source: sourcePref }, 300, (p) => void host.prefs.set(p).catch(() => {}));
 
   const pvRef = useRef<HTMLDivElement>(null);
+  const sync = useScrollSync(edView, pvRef, isSplit);
   const lastY = useRef<Record<string, number>>({});
   const trackScroll = (el: HTMLElement, key: string) => {
     const y = el.scrollTop;
@@ -75,15 +82,33 @@ export function App({ initial }: { initial: Initial }) {
     if (pv && h) pv.scrollTo({ top: Math.max(0, h.offsetTop - 100), behavior: "smooth" });
   };
 
+  const pendingLocate = useRef<number | null>(null);
+  const locate = useCallback((line: number) => {
+    pendingLocate.current = line;
+    dispatch({ type: "locate" });
+  }, []);
+  useEffect(() => {
+    const v = edView.current;
+    const line = pendingLocate.current;
+    if (!v || line === null) return;
+    pendingLocate.current = null;
+    locateLine(v, line);
+    v.focus();
+  });
+
+  const { edit } = doc;
   const actions: BlockActions = useMemo(
     () => ({
       interactive: true,
       showLineNumbers: prefs.showLn,
       onToggleLineNumbers: () => setPrefs((p) => ({ ...p, showLn: !p.showLn })),
-      onToggleTask: (line) => doc.edit(toggleTask(doc.text, line)),
+      onToggleTask: (line) => {
+        edit((t) => toggleTask(t, line));
+        if (edView.current) flashLine(edView.current, line, 1200);
+      },
       onZoomCode: (_b: CodeBlock) => {},
     }),
-    [prefs.showLn, doc],
+    [prefs.showLn, edit],
   );
 
   const runExport = (_a: ExportAction) => {};
@@ -138,6 +163,24 @@ export function App({ initial }: { initial: Initial }) {
   return (
     <div className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}`}>
       <main className="main">
+        {showEd && (
+          <section className="pane-ed" aria-label="源码编辑" style={{ flex: isSplit ? `0 0 ${split}%` : "1 1 auto" }}>
+            <SourceEditor
+              text={doc.text}
+              inline={prefs.inline}
+              focus={focus}
+              wide={!isSplit}
+              viewRef={edView}
+              onChange={edit}
+              onCursor={setCursor}
+              onScroll={() => {
+                if (edView.current) trackScroll(edView.current.scrollDOM, "e");
+                sync.fromEditor();
+              }}
+            />
+          </section>
+        )}
+        {isSplit && <Divider split={split} onSplit={setSplit} />}
         {showPv && (
           <section className={`pv pane-pv bg-${prefs.bg}`} aria-label={isLive ? "实时编辑" : "预览"}>
             <div
@@ -146,9 +189,10 @@ export function App({ initial }: { initial: Initial }) {
               onScroll={(e) => {
                 trackScroll(e.currentTarget, "p");
                 updateToc();
+                sync.fromPreview();
               }}
             >
-              <Article doc={parsed} typography={prefs} focus={focus} actions={actions} />
+              <Article doc={parsed} typography={prefs} focus={focus} actions={actions} onLocate={locate} />
             </div>
             <Toc headings={parsed.headings} active={toc.line} pct={toc.pct} onJump={jump} />
           </section>
@@ -173,11 +217,10 @@ export function App({ initial }: { initial: Initial }) {
         onKeepMine={() => void host.doc.keepMine().catch(() => {})}
         onRevert={() => void host.doc.revert().catch(() => {})}
       />
-      <StatusBar chars={parsed.stats.chars} minutes={parsed.stats.minutes} mode={mode} cursor={null} blockLabel={null} />
+      <StatusBar chars={parsed.stats.chars} minutes={parsed.stats.minutes} mode={mode} cursor={cursor} blockLabel={null} />
     </div>
   );
 }
-
 
 /** Relative image paths name files next to the document, which Go serves. */
 function resolveImage(src: string, dir: string): string {

@@ -8,3 +8,4 @@ mygo_windows_*.syso
 *.zip
 /dew
 /dew-e2e
+/.playwright-cli

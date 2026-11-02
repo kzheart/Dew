@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { Heading } from "../markdown/parse";
+import { clampSplit, SPLIT_MAX, SPLIT_MIN } from "../state/scrollSync";
 import { modeLabels, type Mode } from "../state/view";
 
 export function Toc({ headings, active, pct, onJump }: {
@@ -52,5 +54,40 @@ export function StatusBar({ chars, minutes, mode, cursor, blockLabel }: {
       {mode === "split" && <><span className="hide-sm">段落对齐同步</span><span className="dot hide-sm" /></>}
       <span>{modeLabels[mode]}</span>
     </footer>
+  );
+}
+
+export function Divider({ split, onSplit }: { split: number; onSplit(pct: number): void }) {
+  const [drag, setDrag] = useState(false);
+  return (
+    <div
+      className={drag ? "divider drag" : "divider"}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="拖拽调整分栏宽度"
+      aria-valuemin={SPLIT_MIN}
+      aria-valuemax={SPLIT_MAX}
+      aria-valuenow={split}
+      tabIndex={0}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDrag(true);
+      }}
+      onPointerMove={(e) => {
+        if (!drag) return;
+        const r = e.currentTarget.parentElement!.getBoundingClientRect();
+        onSplit(clampSplit(((e.clientX - r.left) / r.width) * 100));
+      }}
+      onPointerUp={() => setDrag(false)}
+      onPointerCancel={() => setDrag(false)}
+      onKeyDown={(e) => {
+        const step = e.key === "ArrowLeft" ? -2 : e.key === "ArrowRight" ? 2 : 0;
+        if (!step) return;
+        e.preventDefault();
+        onSplit(clampSplit(split + step));
+      }}
+    >
+      <span className="grip glass" />
+    </div>
   );
 }

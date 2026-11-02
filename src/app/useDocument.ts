@@ -10,6 +10,7 @@ const SEND_DELAY = 150;
  */
 export function useDocument(initial: { text: string; state: DocumentState }) {
   const [text, setText] = useState(initial.text);
+  const latest = useRef(initial.text);
   const [state, setState] = useState(initial.state);
   /** Bumped when the text came from the file rather than from typing. */
   const [revision, setRevision] = useState(0);
@@ -24,8 +25,12 @@ export function useDocument(initial: { text: string; state: DocumentState }) {
     await host.doc.setContent(t);
   }, []);
 
+  /** Takes the new text, or a function of the latest text for edits made outside an editor. */
   const edit = useCallback(
-    (next: string) => {
+    (change: string | ((text: string) => string)) => {
+      const next = typeof change === "function" ? change(latest.current) : change;
+      if (next === latest.current) return;
+      latest.current = next;
       setText(next);
       unsent.current = next;
       clearTimeout(timer.current);
@@ -44,7 +49,8 @@ export function useDocument(initial: { text: string; state: DocumentState }) {
     const offReload = host.doc.onReload(async () => {
       clearTimeout(timer.current);
       unsent.current = null;
-      setText(await host.doc.content());
+      latest.current = await host.doc.content();
+      setText(latest.current);
       setRevision((r) => r + 1);
     });
     const onBlur = () => void flush();

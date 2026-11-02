@@ -1,4 +1,4 @@
-import { Fragment, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref } from "react";
+import { Fragment, memo, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref } from "react";
 import type { Block, ParsedDocument } from "../markdown/parse";
 import type { Prefs } from "../platform";
 import { BlockActionsContext, BlockView, type BlockActions } from "./Blocks";
@@ -29,7 +29,7 @@ export function typographyStyle(t: Typography): CSSProperties {
 
 const INTERACTIVE = "label,button,input,a,select,textarea";
 
-export function Article({ doc, typography, focus, actions, live, onLocate, articleRef }: Props) {
+export const Article = memo(function Article({ doc, typography, focus, actions, live, onLocate, articleRef }: Props) {
   const items = articleItems(doc.blocks, live?.range ?? null);
   const blockOf = (e: MouseEvent) => {
     const t = e.target as Element;
@@ -64,4 +64,4 @@ export function Article({ doc, typography, focus, actions, live, onLocate, artic
       </article>
     </BlockActionsContext.Provider>
   );
-}
+});
