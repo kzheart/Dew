@@ -16,7 +16,8 @@ export const Person = (p: IconProps) => <Svg size={12} weight={2} {...p}><circle
 export const Hash = (p: IconProps) => <Svg {...p}><path d="M5 9h14M5 15h14M10 3L8 21M16 3l-2 18" /></Svg>;
 export const Expand = (p: IconProps) => <Svg {...p}><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></Svg>;
 export const Check = (p: IconProps) => <Svg weight={2.2} {...p}><path d="M5 12l5 5 9-10" /></Svg>;
-export const CopyIcon = (p: IconProps) => <Svg {...p}><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></Svg>;
+export const Download = (p: IconProps) => <Svg {...p}><path d="M12 15V3" /><path d="M7 8l5-5 5 5" /><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" /></Svg>;
+export const CopyIcon =(p: IconProps) => <Svg {...p}><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></Svg>;
 
 /** Icons of the callout variants, after GitHub's alerts. */
 export const calloutIcons: Record<string, ReactNode> = {

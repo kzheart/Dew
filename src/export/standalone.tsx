@@ -1,22 +1,25 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import type { DiagramTheme } from "../diagram/engines";
 import type { ParsedDocument } from "../markdown/parse";
 import type { Prefs } from "../platform";
 import { typographyStyle, type Typography } from "../preview/Article";
 import { BlockActionsContext, type BlockActions } from "../preview/actions";
 import { BlockView } from "../preview/Blocks";
 
-const exportActions = (showLineNumbers: boolean): BlockActions => ({
+const exportActions = (showLineNumbers: boolean, theme: DiagramTheme): BlockActions => ({
   interactive: false,
   showLineNumbers,
+  theme,
   onToggleLineNumbers() {},
   onToggleTask() {},
   onZoom() {},
+  onExportSvg() {},
 });
 
-/** The document as static article markup: every block open, no controls. */
-export function renderArticle(doc: ParsedDocument, prefs: Typography & Pick<Prefs, "showLn">): string {
+/** The document as static article markup: every block open, no controls, diagrams drawn for theme. */
+export function renderArticle(doc: ParsedDocument, prefs: Typography & Pick<Prefs, "showLn">, theme: DiagramTheme): string {
   return renderToStaticMarkup(
-    <BlockActionsContext.Provider value={exportActions(prefs.showLn)}>
+    <BlockActionsContext.Provider value={exportActions(prefs.showLn, theme)}>
       <article className={`art doc ff-${prefs.ff}`} style={typographyStyle(prefs)}>
         {doc.blocks.map((b) => (
           <BlockView key={`${b.kind}-${b.start}`} block={b} />

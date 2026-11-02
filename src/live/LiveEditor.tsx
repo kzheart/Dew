@@ -5,10 +5,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from 
 import { liveTokens, renderExtensions, tokenClasses } from "../editor/render";
 import { external } from "../editor/SourceEditor";
 import { liveSyntax } from "../editor/syntax";
-import { languageLabel } from "../markdown/highlight";
 import { highlightedLines, type Block } from "../markdown/parse";
 import { diff } from "../markdown/source";
-import { codeMeta } from "../preview/Code";
+import { codeLabel, codeMeta } from "../preview/Code";
 import type { Caret } from "./session";
 
 interface Props {
@@ -174,7 +173,7 @@ export function LiveEditor({ block, source, caret, showLineNumbers, tools, onCha
     return (
       <div className="blk act cb">
         <div className="cb-head">
-          <span className="cb-lang">{languageLabel(block.lang)}</span>
+          <span className="cb-lang">{codeLabel(block)}</span>
           {meta && <span className="cb-meta">{meta}</span>}
         </div>
         <div className="cb-body lv" ref={attach} />

@@ -166,6 +166,20 @@ pre.cb-body,pre.lb-code{display:grid;grid-template-columns:minmax(100%,max-conte
 .bg-night .dl-add .dl-tx{color:#C6E4D8}
 .bg-night .dl-del .dl-mark,.bg-night .dl-del .dl-no,.bg-night .df-del{color:#FF8170}
 .bg-night .dl-del .dl-tx{color:#F0D2CE}
+/* Diagrams: the chart centered on the page's own color; a failed one says why above its source. */
+.cb.dia{background:#FFFFFF}
+.bg-paper .cb.dia{background:#F4ECDA}
+.bg-night .cb.dia{background:#1E1E20}
+/* Centered by text-align, which a rich text paste keeps, where flex would not survive. */
+.dia-body{text-align:center;padding:18px 20px 22px;overflow-x:auto}
+.dia-svg svg{display:inline-block;vertical-align:top;max-width:100%;height:auto}
+.dia-wait{min-height:160px;align-items:center;font-family:-apple-system,'PingFang SC',sans-serif;font-size:12px;color:#6E6E73}
+.bg-paper .dia-wait{color:#6B5B45}
+.bg-night .dia-wait{color:#8F8F96}
+.dia-err{margin:2px 14px 6px;padding:8px 12px;border-radius:10px;background:#FCECEB;color:#9A2A20;font-family:-apple-system,'PingFang SC',sans-serif;font-size:12px;line-height:1.5}
+.dia-err pre{margin:2px 0 0;font-family:'SF Mono',Menlo,'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;white-space:pre-wrap;overflow-wrap:anywhere}
+.bg-paper .dia-err{background:#EDD3C0;color:#7A2A12}
+.bg-night .dia-err{background:#3A1F1D;color:#F28B80}
 .tk-mark,.tk-meta,.tk-pun,.tk-fence,.tk-pipe,.tk-com{color:#6E6E73}
 .tk-com{font-style:italic}
 .tk-key{color:#0A66D8}

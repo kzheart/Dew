@@ -156,7 +156,7 @@ try {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   `);
   await settle();
-  check("the code lightbox opens and counts search hits", (await text(".lb-search")).includes("3 处匹配"), await text(".lb-search"));
+  check("the code lightbox opens and counts search hits", (await text(".lb-count")) === "1 / 3", await text(".lb-count"));
   await capture("e2e-lightbox");
   await page(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
   await settle();

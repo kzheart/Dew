@@ -6,14 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { parseDocument } from "../markdown/parse";
 import { BlockActionsContext } from "./actions";
 import { BlockView } from "./Blocks";
-import { codeMeta, foldedLines, searchHits } from "./Code";
-
-test("block search finds lines ignoring case, and nothing for a blank query", () => {
-  const code = "export function sync() {\n  const map = build();\n  view.onScroll(() => map);\n}";
-  expect([...searchHits(code, "MAP")]).toEqual([1, 2]);
-  expect(searchHits(code, "  ").size).toBe(0);
-  expect(searchHits(code, "nothing").size).toBe(0);
-});
+import { codeMeta, foldedLines } from "./Code";
 
 test("highlighted lines read as the prototype labels them", () => {
   expect(codeMeta([2, 4])).toBe("高亮第 2、4 行");
@@ -33,7 +26,7 @@ const superSample = parseDocument(readFileSync(new URL("../../samples/超级代�
 
 function renderBlock(start: number, interactive: boolean): string {
   const block = superSample.blocks.find((b) => b.start === start)!;
-  const actions = { interactive, showLineNumbers: true, onToggleLineNumbers() {}, onToggleTask() {}, onZoom() {} };
+  const actions = { interactive, showLineNumbers: true, theme: "white" as const, onToggleLineNumbers() {}, onToggleTask() {}, onZoom() {}, onExportSvg() {} };
   return renderToStaticMarkup(
     <BlockActionsContext.Provider value={actions}>
       <BlockView block={block} />

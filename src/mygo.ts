@@ -189,6 +189,10 @@ export const Export = {
   richText(html: string, text: string): Promise<void> {
     return call("Export.RichText", html, text);
   },
+  /** SVG saves a diagram's SVG where the user chooses. */
+  svg(svg: string, name: string): Promise<string> {
+    return call("Export.SVG", svg, name);
+  },
   /**
    * ShareCard copies a PNG image to the clipboard and saves it where the
    * user chooses.

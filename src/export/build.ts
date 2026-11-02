@@ -1,4 +1,5 @@
 import katexCss from "katex/dist/katex.min.css?raw";
+import { renderDiagrams } from "../diagram/engines";
 import type { ParsedDocument } from "../markdown/parse";
 import type { Prefs } from "../platform";
 import articleCss from "../styles/article.css?raw";
@@ -37,7 +38,8 @@ function inlinedKatexStyles(): Promise<string> {
 
 /** The standalone HTML that both the HTML and the PDF export write. */
 export async function buildStandalone(doc: ParsedDocument, prefs: Prefs, title: string, bg: Prefs["bg"]): Promise<string> {
-  const body = renderArticle(doc, prefs);
+  await renderDiagrams(doc.blocks, bg);
+  const body = renderArticle(doc, prefs, bg);
   const css = [body.includes('class="katex') ? await inlinedKatexStyles() : "", articleCss, exportCss].join("\n");
   return standaloneDocument({ title, body, css, bg });
 }

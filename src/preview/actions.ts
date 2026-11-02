@@ -1,5 +1,6 @@
 import { createContext } from "react";
-import type { Block } from "../markdown/parse";
+import type { DiagramTheme } from "../diagram/engines";
+import type { Block, DiagramEngine } from "../markdown/parse";
 
 export type CodeBlock = Extract<Block, { kind: "code" }>;
 export type TableBlock = Extract<Block, { kind: "table" }>;
@@ -14,15 +15,20 @@ export interface BlockActions {
   /** False when rendering for an export: no buttons, everything open. */
   interactive: boolean;
   showLineNumbers: boolean;
+  /** The background diagrams are drawn for. */
+  theme: DiagramTheme;
   onToggleLineNumbers(): void;
   onToggleTask(line: number): void;
   onZoom(target: LightboxTarget): void;
+  onExportSvg(svg: string, engine: DiagramEngine): void;
 }
 
 export const BlockActionsContext = createContext<BlockActions>({
   interactive: false,
   showLineNumbers: true,
+  theme: "white",
   onToggleLineNumbers() {},
   onToggleTask() {},
   onZoom() {},
+  onExportSvg() {},
 });

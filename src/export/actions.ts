@@ -1,4 +1,5 @@
 import type { ExportAction } from "../app/Header";
+import { renderDiagrams } from "../diagram/engines";
 import { parseDocument, type Block } from "../markdown/parse";
 import { host, type Prefs } from "../platform";
 import { buildStandalone } from "./build";
@@ -31,7 +32,8 @@ export async function exportDocument(action: ExportAction, { text, fileName, pre
     }
     case "richText": {
       const doc = parseDocument(text, { resolveImage, mathml: true });
-      await host.exports.richText(inlineStyled(renderArticle(doc, prefs), prefs.bg), text);
+      await renderDiagrams(doc.blocks, prefs.bg);
+      await host.exports.richText(await inlineStyled(renderArticle(doc, prefs, prefs.bg), prefs.bg), text);
       return "";
     }
     case "shareCard": {

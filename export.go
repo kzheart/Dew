@@ -47,6 +47,15 @@ func (exportService) HTML(ctx context.Context, html, name string) (string, error
 	return path, os.WriteFile(path, []byte(html), 0o644)
 }
 
+// SVG saves a diagram's SVG where the user chooses.
+func (exportService) SVG(ctx context.Context, svg, name string) (string, error) {
+	path, err := askSavePath(ctx, name+".svg", mygo.FileFilter{Name: "SVG", Extensions: []string{"svg"}})
+	if err != nil || path == "" {
+		return "", err
+	}
+	return path, os.WriteFile(path, []byte(svg), 0o644)
+}
+
 // RichText puts styled HTML on the clipboard, with its plain text for
 // apps that take no HTML.
 func (exportService) RichText(html, text string) error {

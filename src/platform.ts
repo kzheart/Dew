@@ -24,6 +24,7 @@ export interface Host {
     html(html: string, name: string): Promise<string>;
     richText(html: string, text: string): Promise<void>;
     shareCard(pngBase64: string, name: string): Promise<string>;
+    svg(svg: string, name: string): Promise<string>;
   };
   onCommand(fn: (c: Command) => void): () => void;
   syncView(s: ViewState): void;
@@ -87,6 +88,7 @@ async function browserHost(): Promise<Host> {
       html: async () => "",
       richText: async () => {},
       shareCard: async () => "",
+      svg: async () => "",
     },
     onCommand: () => () => {},
     syncView: () => {},

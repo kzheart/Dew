@@ -1,8 +1,10 @@
 import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { engines, useDiagram } from "../diagram/engines";
 import { parseDiff, type DiffLine } from "../markdown/diff";
 import { highlightDiff, highlightLines, languageLabel } from "../markdown/highlight";
+import type { DiagramEngine } from "../markdown/parse";
 import { BlockActionsContext, type CodeBlock, type LightboxTarget } from "./actions";
-import { Check, Chevron, CopyIcon, Expand, Hash } from "./icons";
+import { Check, Chevron, CopyIcon, Download, Expand, Hash } from "./icons";
 
 const html = (h: string) => ({ __html: h });
 
@@ -23,7 +25,8 @@ export function codeMeta(highlight: number[]): string {
 }
 
 export function useHighlighted(block: CodeBlock) {
-  return useMemo(() => highlightLines(block.code, block.lang), [block.code, block.lang]);
+  const lang = block.view.kind === "diagram" && block.view.engine === "vega-lite" ? "json" : block.lang;
+  return useMemo(() => highlightLines(block.code, lang), [block.code, lang]);
 }
 
 export function useDiff(block: CodeBlock) {
@@ -35,11 +38,72 @@ export function useDiff(block: CodeBlock) {
 export function Code({ block }: { block: CodeBlock }) {
   switch (block.view.kind) {
     case "plain":
-    case "diagram":
       return <PlainCode block={block} />;
     case "diff":
       return <DiffCode block={block} />;
+    case "diagram":
+      return <DiagramCode block={block} engine={block.view.engine} />;
   }
+}
+
+/** The badge a code block wears: its diagram engine, else its language. */
+export function codeLabel(block: CodeBlock): string {
+  return block.view.kind === "diagram" ? engines[block.view.engine].label : languageLabel(block.lang);
+}
+
+/** A diagram fence drawn as its chart, with its source a toggle away. */
+function DiagramCode({ block, engine }: { block: CodeBlock; engine: DiagramEngine }) {
+  const { interactive, showLineNumbers, theme, onExportSvg } = useContext(BlockActionsContext);
+  const [showSource, setShowSource] = useState(false);
+  const result = useDiagram(engine, block.code, theme);
+  const lines = useHighlighted(block);
+  const note = engines[engine].note;
+  const svg = result.status === "ok" ? result.svg : null;
+  return (
+    <div {...attrs(block, "dia")}>
+      <CodeHead
+        label={codeLabel(block)}
+        meta={
+          <>
+            {interactive && (
+              <div className="cb-seg" role="group" aria-label="显示方式">
+                <button aria-pressed={!showSource} onClick={() => setShowSource(false)}>图表</button>
+                <button aria-pressed={showSource} onClick={() => setShowSource(true)}>源码</button>
+              </div>
+            )}
+            {note && <span className="cb-meta">{note}</span>}
+          </>
+        }
+      >
+        {showSource && <LineNumberToggle />}
+        <ZoomButton target={svg && !showSource ? { kind: "diagram", block, svg } : { kind: "code", block }} />
+        {showSource ? (
+          <CopyButton text={block.code} />
+        ) : (
+          <button className="cb-btn" disabled={!svg} onClick={() => svg && onExportSvg(svg, engine)}>
+            <Download />导出 SVG
+          </button>
+        )}
+      </CodeHead>
+      {showSource ? (
+        <CodeLines lines={lines} highlight={block.highlight} showLineNumbers={showLineNumbers} />
+      ) : result.status === "ok" ? (
+        <div className="dia-body">
+          <div className="dia-svg" role="img" aria-label={`${engines[engine].label} 图表`} dangerouslySetInnerHTML={html(result.svg)} />
+        </div>
+      ) : result.status === "loading" ? (
+        <div className="dia-body dia-wait">正在渲染图表…</div>
+      ) : (
+        <>
+          <div className="dia-err" role="alert">
+            <b>图表无法渲染</b>
+            <pre>{result.message}</pre>
+          </div>
+          <CodeLines lines={lines} highlight={block.highlight} showLineNumbers={showLineNumbers} />
+        </>
+      )}
+    </div>
+  );
 }
 
 export const COLLAPSE_THRESHOLD = 20;
@@ -176,7 +240,16 @@ function LineNumberToggle() {
 export function ZoomButton({ target, className = "cb-btn" }: { target: LightboxTarget; className?: string }) {
   const { onZoom } = useContext(BlockActionsContext);
   return (
-    <button className={className} onClick={() => onZoom(target)} aria-label="放大查看" title="放大查看">
+    <button
+      className={className}
+      onClick={(e) => {
+        // WebKit leaves a clicked button unfocused; the lightbox gives focus back to whatever had it.
+        e.currentTarget.focus({ preventScroll: true });
+        onZoom(target);
+      }}
+      aria-label="放大查看"
+      title="放大查看"
+    >
       <Expand />
     </button>
   );
@@ -191,18 +264,25 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function CodeLines({ lines, highlight, showLineNumbers, hits, className = "cb-body", fontSize }: {
+/** Search marks on a row: every row with a hit, and the one the search is on. */
+interface RowHits {
+  hits?: Set<number>;
+  current?: number | null;
+}
+
+const hitClass = (i: number, { hits, current }: RowHits) => (i === current ? " lb-hit lb-cur" : hits?.has(i) ? " lb-hit" : "");
+
+export function CodeLines({ lines, highlight, showLineNumbers, className = "cb-body", fontSize, ...marks }: RowHits & {
   lines: string[];
   highlight: number[];
   showLineNumbers: boolean;
-  hits?: Set<number>;
   className?: string;
   fontSize?: number;
 }) {
   return (
     <pre className={className} style={fontSize ? { fontSize } : undefined}>
       {lines.map((l, i) => (
-        <span key={i} className={`cl${highlight.includes(i + 1) ? " cl-hl" : ""}${hits?.has(i) ? " lb-hit" : ""}`}>
+        <span key={i} className={`cl${highlight.includes(i + 1) ? " cl-hl" : ""}${hitClass(i, marks)}`}>
           {showLineNumbers && <span className="cb-ln">{i + 1}</span>}
           <span dangerouslySetInnerHTML={html(l)} />
         </span>
@@ -214,17 +294,18 @@ export function CodeLines({ lines, highlight, showLineNumbers, hits, className =
 const DIFF_MARK: Record<DiffLine["type"], string> = { add: "+", del: "−", context: "", hunk: "", meta: "" };
 
 /** Diff rows: old and new line numbers, a +/− mark that does not rely on color, and the code. */
-export function DiffLines({ rows, lines, showLineNumbers, className = "cb-body" }: {
+export function DiffLines({ rows, lines, showLineNumbers, className = "cb-body", fontSize, ...marks }: RowHits & {
   rows: DiffLine[];
   /** Each row's highlighted code. */
   lines: string[];
   showLineNumbers: boolean;
   className?: string;
+  fontSize?: number;
 }) {
   return (
-    <pre className={`${className} df`}>
+    <pre className={`${className} df`} style={fontSize ? { fontSize } : undefined}>
       {rows.map((l, i) => (
-        <span key={i} className={`dl dl-${l.type}`}>
+        <span key={i} className={`dl dl-${l.type}${hitClass(i, marks)}`}>
           {showLineNumbers && (
             <>
               <span className="dl-no">{l.old ?? ""}</span>
@@ -265,13 +346,4 @@ export async function copyText(text: string) {
     document.execCommand("copy");
     ta.remove();
   }
-}
-
-/** Lines (0-based) of code that contain query, ignoring case; none for a blank query. */
-export function searchHits(code: string, query: string): Set<number> {
-  const q = query.trim().toLowerCase();
-  const hits = new Set<number>();
-  if (!q) return hits;
-  code.split("\n").forEach((line, i) => line.toLowerCase().includes(q) && hits.add(i));
-  return hits;
 }

@@ -1,7 +1,7 @@
 import { memo, useContext, useState, type ReactNode } from "react";
-import type { Block } from "../markdown/parse";
-import { BlockActionsContext } from "./actions";
-import { Code } from "./Code";
+import type { Align, Block } from "../markdown/parse";
+import { BlockActionsContext, type TableBlock } from "./actions";
+import { Code, ZoomButton } from "./Code";
 import { Calendar, calloutIcons, Chevron, Person } from "./icons";
 
 const html = (h: string) => ({ __html: h });
@@ -163,11 +163,18 @@ function List({ block }: { block: Extract<Block, { kind: "list" }> }) {
 
 const SHORTCUT = /^[⌘⌥⇧⌃]+[^\s<]{1,6}$/;
 
-function Table({ block }: { block: Extract<Block, { kind: "table" }> }) {
-  const cls = (i: number) => (block.align[i] === "center" ? "c" : block.align[i] === "right" ? "r" : undefined);
-  const cell = (h: string) => html(SHORTCUT.test(h) ? `<kbd>${h}</kbd>` : h);
+/** A cell's HTML as a table shows it: a lone shortcut reads as a key. */
+export const cellHtml = (h: string) => (SHORTCUT.test(h) ? `<kbd>${h}</kbd>` : h);
+
+export const alignClass = (a: Align) => (a === "center" ? "c" : a === "right" ? "r" : undefined);
+
+function Table({ block }: { block: TableBlock }) {
+  const { interactive } = useContext(BlockActionsContext);
+  const cls = (i: number) => alignClass(block.align[i] ?? null);
+  const cell = (h: string) => html(cellHtml(h));
   return (
-    <div {...attrs(block)}>
+    <div {...attrs(block, "tbl-blk")}>
+      {interactive && <ZoomButton target={{ kind: "table", block }} className="tbl-zoom" />}
       <div className="tbl-wrap">
         <table className="tbl">
           <thead>

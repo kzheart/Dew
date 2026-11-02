@@ -15,7 +15,7 @@ const isDefault = (v: string) =>
  * classes dropped. It is laid out off screen under the app's own stylesheet,
  * so it pastes looking like the preview.
  */
-export function inlineStyled(articleHtml: string, bg: string): string {
+export async function inlineStyled(articleHtml: string, bg: string): Promise<string> {
   const host = document.createElement("div");
   host.className = `pv bg-${bg}`;
   host.style.cssText = "position:fixed;left:-20000px;top:0;width:820px;pointer-events:none";
@@ -23,9 +23,15 @@ export function inlineStyled(articleHtml: string, bg: string): string {
   document.body.append(host);
   try {
     host.querySelectorAll(".fn-pop").forEach((el) => el.remove());
+    await Promise.all([...host.querySelectorAll<SVGSVGElement>(".dia-svg > svg")].map(asImage));
     host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((box) => box.replaceWith(box.checked ? "☑ " : "☐ "));
     const root = host.firstElementChild as HTMLElement;
     root.style.margin = "0";
+    // The article spaces its blocks with a flex column's gap, of which only
+    // display would be copied, laying the blocks out in a row. Margins paste.
+    const gap = getComputedStyle(root).rowGap;
+    root.style.display = "block";
+    [...root.children].slice(1).forEach((el) => ((el as HTMLElement).style.marginTop = gap));
     const all = [root, ...root.querySelectorAll<HTMLElement>("*")];
     const styles = all.map((el) => {
       const cs = getComputedStyle(el);
@@ -42,4 +48,31 @@ export function inlineStyled(articleHtml: string, bg: string): string {
   } finally {
     host.remove();
   }
+}
+
+/**
+ * Swaps a chart for a picture of it. A chart styles itself through its
+ * classes and its own <style>, which pasting strips, and most editors drop
+ * inline SVG anyway; a PNG pastes nearly everywhere.
+ */
+async function asImage(svg: SVGSVGElement) {
+  const { width, height } = svg.getBoundingClientRect();
+  const src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}`;
+  const img = document.createElement("img");
+  img.width = Math.round(width);
+  img.height = Math.round(height);
+  img.alt = svg.parentElement?.getAttribute("aria-label") ?? "";
+  try {
+    const picture = new Image();
+    picture.src = src;
+    await picture.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width * 2;
+    canvas.height = img.height * 2;
+    canvas.getContext("2d")!.drawImage(picture, 0, 0, canvas.width, canvas.height);
+    img.src = canvas.toDataURL("image/png");
+  } catch {
+    img.src = src;
+  }
+  svg.replaceWith(img);
 }

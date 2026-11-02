@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { flashLine, locateLine } from "../editor/render";
 import { SourceEditor, type Cursor } from "../editor/SourceEditor";
 import { exportDocument } from "../export/actions";
+import { baseName } from "../export/standalone";
 import { selectedPassage } from "../export/selection";
 import { useLive } from "../live/useLive";
 import { parseDocument } from "../markdown/parse";
@@ -116,6 +117,7 @@ export function App({ initial }: { initial: Initial }) {
   });
 
   const { edit } = doc;
+  const docName = doc.state.name;
   const actions: BlockActions = useMemo(
     () => ({
       interactive: true,
@@ -126,8 +128,10 @@ export function App({ initial }: { initial: Initial }) {
         if (edView.current) flashLine(edView.current, line, 1200);
       },
       onZoom: setZoomed,
+      theme: prefs.bg,
+      onExportSvg: (svg, engine) => void host.exports.svg(svg, `${baseName(docName)}-${engine}`).catch((e) => console.error("SVG export failed", e)),
     }),
-    [prefs.showLn, edit],
+    [prefs.showLn, prefs.bg, docName, edit],
   );
 
   const { live, label: liveLabel } = useLive({
@@ -252,11 +256,13 @@ export function App({ initial }: { initial: Initial }) {
         onKeepMine={() => void host.doc.keepMine().catch(() => {})}
         onRevert={() => void host.doc.revert().catch(() => {})}
       />
-      {lightbox.mounted && lastZoomed.current?.kind === "code" && (
+      {lightbox.mounted && lastZoomed.current && (
         <Lightbox
-          block={lastZoomed.current.block}
+          key={`${lastZoomed.current.kind}-${lastZoomed.current.block.start}`}
+          target={lastZoomed.current}
           section={parsed.headings.filter((h) => h.line < lastZoomed.current!.block.start).at(-1)?.text ?? null}
           showLineNumbers={prefs.showLn}
+          theme={prefs.bg}
           leaving={lightbox.leaving}
           onClose={closeLightbox}
         />
