@@ -40,6 +40,7 @@ export function SourceEditor({ text, inline, focus, wide, initialCursor, assist 
   const parent = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const inlineConf = useRef(new Compartment());
+  const assistConf = useRef(new Compartment());
   const callbacks = useRef({ onChange, onCursor, onScroll });
   callbacks.current = { onChange, onCursor, onScroll };
 
@@ -63,7 +64,7 @@ export function SourceEditor({ text, inline, focus, wide, initialCursor, assist 
           markdownSyntax(),
           renderExtensions,
           inlineConf.current.of(inlineRender.of(inline)),
-          assist,
+          assistConf.current.of(assist),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
           EditorView.scrollMargins.of(() => ({ top: 84, bottom: 80 })),
           EditorView.contentAttributes.of({ "aria-label": "Markdown 源码", spellcheck: "false", autocorrect: "off", autocapitalize: "off" }),
@@ -107,6 +108,10 @@ export function SourceEditor({ text, inline, focus, wide, initialCursor, assist 
   useEffect(() => {
     view.current?.dispatch({ effects: inlineConf.current.reconfigure(inlineRender.of(inline)) });
   }, [inline]);
+
+  useEffect(() => {
+    view.current?.dispatch({ effects: assistConf.current.reconfigure(assist) });
+  }, [assist]);
 
   return <div ref={parent} className={`ed${focus ? " focus" : ""}${wide ? " wide" : ""}`} />;
 }

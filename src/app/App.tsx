@@ -16,6 +16,7 @@ import type { BlockActions, LightboxTarget } from "../preview/actions";
 import { host, type Command, type DocumentState, type FileTab, type Prefs } from "../platform";
 import { changedKeys } from "../state/prefs";
 import { fileName } from "../state/recent";
+import { glassLevel } from "../state/settings";
 import { modeOf, viewReducer, type ViewState } from "../state/view";
 import { Divider, StatusBar, Toc } from "./Chrome";
 import { Dock } from "./Dock";
@@ -23,6 +24,7 @@ import { Header, type ExportAction, type Popover } from "./Header";
 import { useDebouncedEffect, usePresence } from "./hooks";
 import { LightTable } from "./LightTable";
 import { QuickOpen } from "./QuickOpen";
+import { Settings } from "./Settings";
 import { Lightbox } from "./Lightbox";
 import { ShareCard } from "./ShareCard";
 import { Toasts, useToasts } from "./Toasts";
@@ -74,7 +76,17 @@ export function App({ initial }: { initial: Initial }) {
   const openOverview = () => {
     setPopover(null);
     setFinding(false);
+    setSetting(false);
     setOverview(true);
+  };
+  const [setting, setSetting] = useState(false);
+  const inspector = usePresence(setting, 240);
+  const closeSettings = useCallback(() => setSetting(false), []);
+  const openSettings = () => {
+    setPopover(null);
+    setOverview(false);
+    setFinding(false);
+    setSetting(true);
   };
   const [finding, setFinding] = useState(false);
   const palette = usePresence(finding, 200);
@@ -193,8 +205,8 @@ export function App({ initial }: { initial: Initial }) {
           return path ? { path } : { reason: "文稿还没有保存，截图没有存放的位置" };
         },
         reveal: (path) => void host.assets.reveal(path).catch((e) => console.error("reveal failed", e)),
-      }),
-    [notify, flush],
+      }, { slash: prefs.slash, pairs: prefs.pairs }),
+    [notify, flush, prefs.slash, prefs.pairs],
   );
 
   const { live, label: liveLabel, editTable } = useLive({
@@ -277,6 +289,10 @@ export function App({ initial }: { initial: Initial }) {
         if (overview) closeOverview();
         else openOverview();
         break;
+      case "settings":
+        if (setting) closeSettings();
+        else openSettings();
+        break;
       case "quickOpen":
         if (finding) closeFinder();
         else openFinder();
@@ -293,9 +309,10 @@ export function App({ initial }: { initial: Initial }) {
   }, [mode, focus, prefs.inline]);
 
   const theme = showEd && !isSplit ? "" : prefs.bg === "night" ? " th-night" : prefs.bg === "paper" ? " th-paper" : "";
+  const glass = { clear: " gl-clear", default: "", frost: " gl-frost" }[glassLevel(prefs.glass)];
 
   return (
-    <div className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}`}>
+    <div className={`app${theme}${glass}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}${setting ? " set-on" : ""}`}>
       <main className="main">
         {showEd && (
           <section className="pane-ed" aria-label="源码编辑" style={{ flex: isSplit ? `0 0 ${split}%` : "1 1 auto" }}>
@@ -349,6 +366,8 @@ export function App({ initial }: { initial: Initial }) {
         onToggleFocus={() => setFocus(!focus)}
         onPopover={setPopover}
         onQuickOpen={openFinder}
+        settings={setting}
+        onSettings={() => (setting ? closeSettings() : openSettings())}
         onPrefs={updatePrefs}
         onExport={runExport}
         onKeepMine={() => void host.doc.keepMine().catch(() => {})}
@@ -377,6 +396,17 @@ export function App({ initial }: { initial: Initial }) {
         onNew={() => void host.files.new().catch(() => {})}
         onOverview={openOverview}
       />
+      {inspector.mounted && (
+        <Settings
+          prefs={prefs}
+          base={view.base}
+          leaving={inspector.leaving}
+          onPrefs={updatePrefs}
+          onBase={(base) => dispatch({ type: "base", base })}
+          onClearRecent={() => void host.recent.clear().catch(() => {})}
+          onClose={closeSettings}
+        />
+      )}
       {palette.mounted && (
         <QuickOpen
           files={files}

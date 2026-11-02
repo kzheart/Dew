@@ -112,6 +112,10 @@ export interface Prefs {
    * (frosted).
    */
   glass: number;
+  /** Pairs wraps a selection in the paired symbol typed over it. */
+  pairs: boolean;
+  /** Slash opens the insert menu on a / typed on an empty line. */
+  slash: boolean;
 }
 
 /**

@@ -212,6 +212,45 @@ async function documentChecks() {
     await capture("e2e-popover-export");
     await page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
 
+    // 设置 edits the defaults: a changed row shows a drop that resets it, and a search finds rows across groups.
+    await page(`document.querySelector('[aria-label="排版设置"]').click()`);
+    await waitFor("the Aa popover's link", () => page<boolean>(`return !!document.querySelector(".pop-aa .aa-more")`));
+    await page(`document.querySelector(".pop-aa .aa-more").click()`);
+    const inspector = await waitFor("the settings inspector", () =>
+      page<{ rows: string[]; shifted: boolean } | null>(`
+        const i = document.querySelector('aside[aria-label="设置"]');
+        return i && !document.querySelector(".pop-aa") ? { rows: [...i.querySelectorAll(".srow .k")].map((k) => k.textContent), shifted: document.querySelector(".app").classList.contains("set-on") } : null;
+      `),
+    ).catch(() => null);
+    check(
+      "the Aa popover's 在设置中调整所有文档的默认值 opens 设置 on 外观, and the page makes room",
+      !!inspector && inspector.shifted && inspector.rows.join() === "阅读背景,正文字体,字号,行高,段落间距,版心宽度,玻璃质感",
+      JSON.stringify(inspector),
+    );
+    const setInput = (sel: string, v: string) =>
+      page(`
+        const i = document.querySelector(${JSON.stringify(sel)});
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(i, ${JSON.stringify(v)});
+        i.dispatchEvent(new Event("input", { bubbles: true }));
+      `);
+    await setInput("#s-fs", "19");
+    const drop = await waitFor("the drop by 字号", () => page<string | null>(`return document.querySelector('aside[aria-label="设置"] .modb')?.getAttribute("aria-label") ?? null`)).catch(() => null);
+    const storedFs = await waitFor("the saved font size", async () => (await page<{ fs: number }>(`return await mygo.call("Prefs.Get")`)).fs === 19).catch(() => false);
+    check("changing 字号 there marks the row with a drop and saves it as the default", drop === "恢复默认 16 pt" && storedFs && (await page<string>(`return getComputedStyle(document.querySelector("article")).fontSize`)) === "19px", String(drop));
+    await capture("e2e-settings");
+    await page(`document.querySelector('aside[aria-label="设置"] .modb').click()`);
+    const reset = await waitFor("the reset", () => page<boolean>(`return !document.querySelector('aside[aria-label="设置"] .modb') && document.querySelector("#s-fs").value === "16"`)).catch(() => false);
+    check("the drop resets 字号 to its default", reset);
+    await setInput('aside[aria-label="设置"] .ssearch input', "水印");
+    const found = await waitFor("the search", () =>
+      page<string | null>(`return [...document.querySelectorAll('aside[aria-label="设置"] [role="group"]')].map((g) => g.getAttribute("aria-label") + ":" + [...g.querySelectorAll(".srow .k")].map((k) => k.textContent).join()).join("|") || null`),
+    ).catch(() => null);
+    await setInput('aside[aria-label="设置"] .ssearch input', "主题");
+    const none = await waitFor("no match", () => page<string | null>(`return document.querySelector(".snone")?.textContent ?? null`)).catch(() => null);
+    check("searching 设置 finds rows across groups, and says when none match", found?.endsWith("导出:分享卡片水印") === true && none === "没有找到与「主题」相关的设置", `${found}; ${none}`);
+    await page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await waitFor("the inspector to close", () => page<boolean>(`return !document.querySelector('aside[aria-label="设置"]')`)).catch(() => {});
+
     await menu("视图", "实时");
     await settle();
     await page(`

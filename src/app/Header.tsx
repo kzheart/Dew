@@ -22,6 +22,8 @@ interface Props {
   onToggleFocus(): void;
   onPopover(p: Popover | null): void;
   onQuickOpen(): void;
+  settings: boolean;
+  onSettings(): void;
   onPrefs(p: Partial<Prefs>): void;
   onExport(a: ExportAction): void;
   onKeepMine(): void;
@@ -137,8 +139,11 @@ export function Header(p: Props) {
             <button className="gbtn" aria-expanded={p.popover === "export"} onClick={() => toggle("export")} aria-label="导出与分享" title="导出与分享">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3v12M8 7l4-4 4 4" /><path d="M8 10H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1h-2" /></svg>
             </button>
+            <button className="gbtn" aria-pressed={p.settings} onClick={p.onSettings} aria-label="设置" title="设置 ⌘,">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68 1.65 1.65 0 0 0 10 3.17V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+            </button>
           </div>
-          <AaPopover open={p.popover === "aa"} prefs={p.prefs} onPrefs={p.onPrefs} />
+          <AaPopover open={p.popover === "aa"} prefs={p.prefs} onPrefs={p.onPrefs} onMore={p.onSettings} />
           <ExportPopover
             open={p.popover === "export"}
             guard={p.prefs.pageGuard}
@@ -163,7 +168,7 @@ const backgrounds: { id: Prefs["bg"]; label: string; color: string }[] = [
   { id: "night", label: "暗夜", color: "#1E1E20" },
 ];
 
-function AaPopover({ open, prefs, onPrefs }: { open: boolean; prefs: Prefs; onPrefs(p: Partial<Prefs>): void }) {
+function AaPopover({ open, prefs, onPrefs, onMore }: { open: boolean; prefs: Prefs; onPrefs(p: Partial<Prefs>): void; onMore(): void }) {
   const { mounted, leaving } = usePresence(open, 190);
   if (!mounted) return null;
   const range = (id: string, label: string, value: number, shown: string, min: number, max: number, step: number, set: (v: number) => void) => (
@@ -197,6 +202,7 @@ function AaPopover({ open, prefs, onPrefs }: { open: boolean; prefs: Prefs; onPr
           ))}
         </div>
       </div>
+      <button className="aa-more" onClick={onMore}>在设置中调整所有文档的默认值 →</button>
     </div>
   );
 }

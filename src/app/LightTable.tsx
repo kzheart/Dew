@@ -181,7 +181,12 @@ export function LightTable({ files, recent, text, leaving, onSelect, onCloseFile
   const needle = q.trim().toLowerCase();
   const pages = files.filter((f) => !needle || f.name.toLowerCase().includes(needle));
   const current = files.find((f) => f.current);
-  const now = useMemo(() => Date.now(), [recent]);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, [recent]);
   const vap = useMemo(() => vapor(recent, { now, group, expanded, query: q }), [recent, now, group, expanded, q]);
 
   const shownCards = [...vap.pins, ...vap.blocks.flatMap((b) => (b.kind === "grid" ? b.cards : []))];

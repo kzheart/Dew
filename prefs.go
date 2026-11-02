@@ -86,6 +86,10 @@ type Prefs struct {
 	// Glass is the texture of the glass controls, from 0 (clear) to 10
 	// (frosted).
 	Glass int `json:"glass"`
+	// Pairs wraps a selection in the paired symbol typed over it.
+	Pairs bool `json:"pairs"`
+	// Slash opens the insert menu on a / typed on an empty line.
+	Slash bool `json:"slash"`
 }
 
 func defaultPrefs() Prefs {
@@ -95,7 +99,7 @@ func defaultPrefs() Prefs {
 		Base: BaseLive, Source: SourceOff, ShowLineNumbers: true,
 		CardBackground: CardBlue,
 		PageGuard:      PageGuard{Code: true, Table: true, Chart: true},
-		Keep:           50, Glass: 4,
+		Keep:           50, Glass: 4, Pairs: true, Slash: true,
 	}
 }
 
