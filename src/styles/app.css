@@ -812,3 +812,47 @@ main{transition:transform .5s cubic-bezier(.3,1.1,.4,1),filter .4s ease}
 .pinw{position:relative;display:inline-flex}
 .pin-x{position:absolute;right:-5px;top:-5px;width:18px;height:18px;border:0;border-radius:50%;padding:0;display:inline-flex;align-items:center;justify-content:center;background:#FFFFFF;color:#6E6E73;box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 2px 5px rgba(0,0,0,.12);opacity:0;cursor:default;transition:opacity .2s ease}
 .pinw:hover .pin-x,.pin-x:focus-visible{opacity:1}
+
+/* ⌘P 快速打开 */
+.qback{position:absolute;inset:0;z-index:46;background:rgba(240,240,244,.45);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);animation:fadeIn .22s ease both}
+.qback.out{animation:fadeOut .18s ease both;pointer-events:none}
+.qpal{position:absolute;left:50%;top:96px;width:min(640px,calc(100% - 32px));transform:translateX(-50%);border-radius:26px;background:rgba(250,250,252,.8);-webkit-backdrop-filter:blur(30px) saturate(190%);backdrop-filter:blur(30px) saturate(190%);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),inset 0 0 0 .5px rgba(255,255,255,.6),0 0 0 .5px rgba(0,0,0,.08),0 30px 80px rgba(0,0,0,.22);overflow:hidden;animation:qIn .5s cubic-bezier(.3,1.3,.45,1) backwards;color:#1D1D1F}
+.qback.out .qpal{animation:qOut .18s ease both}
+@keyframes qIn{from{opacity:0;transform:translate(-50%,-14px) scale(.94)}}
+@keyframes qOut{to{opacity:0;transform:translate(-50%,-8px) scale(.96)}}
+.qq{display:flex;align-items:center;gap:12px;height:62px;padding:0 20px;border-bottom:.5px solid rgba(0,0,0,.08)}
+.qq input{flex:1 1 auto;min-width:0;border:0;background:transparent;outline:none;font:inherit;font-size:20px;color:#1D1D1F}
+.qesc{font-size:11px;font-family:'SF Mono',Menlo,monospace;color:#5E5E63;padding:3px 7px;border-radius:6px;background:rgba(0,0,0,.06)}
+.qlist{padding:8px;max-height:400px;overflow:auto}
+.qsh{font-size:11.5px;font-weight:600;color:#5E5E63;padding:10px 12px 6px;letter-spacing:.02em}
+.qit{display:flex;align-items:center;gap:12px;width:100%;min-height:50px;padding:6px 12px;border:0;border-radius:14px;background:transparent;text-align:left;cursor:default;color:#1D1D1F;animation:itemIn .4s cubic-bezier(.3,1.2,.45,1) backwards}
+.qit.sel{background:#0A66D8;color:#FFFFFF}
+.qnw{display:flex;flex-direction:column;flex:1 1 auto;min-width:0}
+.qn{font-size:14px}
+.qn b{color:#0A56B3;font-weight:700}
+.qit.sel .qn b{color:#FFFFFF;text-decoration:underline;text-underline-offset:3px}
+.qpt{font-size:11.5px;color:#5E5E63;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qit.sel .qpt{color:rgba(255,255,255,.85)}
+.qmt{font-size:12px;color:#5E5E63;white-space:nowrap}
+.qit.sel .qmt{color:#FFFFFF}
+.qbadge{font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(10,102,216,.12);color:#0A56B3;font-weight:500}
+.qit.sel .qbadge{background:rgba(255,255,255,.22);color:#FFFFFF}
+.qprog{width:44px;height:3px;border-radius:2px;background:rgba(0,0,0,.1);overflow:hidden;flex:0 0 auto}
+.qprog i{display:block;height:100%;background:#0A66D8}
+.qit.sel .qprog{background:rgba(255,255,255,.35)}
+.qit.sel .qprog i{background:#FFFFFF}
+.qret{font-size:11px;font-family:'SF Mono',Menlo,monospace;padding:3px 7px;border-radius:6px;background:rgba(255,255,255,.22);color:#FFFFFF}
+.qfi{width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;color:#6E6E73;flex:0 0 auto}
+.qit.sel .qfi{color:#FFFFFF}
+.qit.sel .tear .shell{background:rgba(255,255,255,.9)}
+.qit.sel .tear.gone .shell{background:transparent;border-color:rgba(255,255,255,.85)}
+.qft{display:flex;gap:16px;flex-wrap:wrap;padding:11px 20px;border-top:.5px solid rgba(0,0,0,.08);font-size:11.5px;color:#5E5E63}
+.qft kbd{font-size:11px;padding:1px 6px;border-radius:5px;background:rgba(0,0,0,.06);margin-right:4px;color:#3A3A3E}
+.qnone{display:flex;flex-direction:column;align-items:center;gap:12px;padding:26px 0 20px;font-size:13px;color:#5E5E63}
+.m22{position:relative;display:inline-block;width:22px;height:22px;flex:0 0 auto}
+.m22 > .sc{position:absolute;left:0;top:0;transform:scale(.34375);transform-origin:0 0}
+.wbtn{height:40px;padding:0 16px;border-radius:999px;border:0;background:rgba(0,0,0,.06);font-size:13px;color:#1D1D1F;display:inline-flex;align-items:center;gap:8px;cursor:default;transition:transform .35s cubic-bezier(.3,1.6,.5,1),background-color .2s}
+.wbtn:active{transform:scale(.94)}
+.wbtn kbd{font-size:11px;padding:1px 6px;border-radius:5px;background:rgba(0,0,0,.08)}
+.wbtn.pri{background:#0A66D8;color:#FFFFFF}
+.wbtn.pri kbd{background:rgba(255,255,255,.22)}

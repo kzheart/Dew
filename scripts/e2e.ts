@@ -1120,6 +1120,44 @@ async function tabChecks() {
     await Bun.sleep(1200);
     await back.f.s.capture("e2e-tabs-vapor-stacks");
     await back.f.s.page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await waitFor("the light table to go", () => back.f.s.page<boolean>(`return !document.querySelector(".lt")`));
+
+    // ⌘P lists the group's files and the recent ones, and makes a file of a name that matches nothing.
+    const palette = back.f.s;
+    const typeQuery = (q: string) =>
+      palette.page(`
+        const i = document.querySelector("#qo-in");
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(i, ${JSON.stringify(q)});
+        i.dispatchEvent(new Event("input", { bubbles: true }));
+      `);
+    await palette.menu("文件", "快速打开…");
+    const shownInPalette = await settled<Record<string, string[]>>("the palette", () =>
+      palette.page<Record<string, string[]> | null>(`
+        const groups = [...document.querySelectorAll('.qlist [role="group"]')];
+        return groups.length ? Object.fromEntries(groups.map((g) => [g.getAttribute("aria-label"), [...g.querySelectorAll(".qit")].map((r) => r.querySelector(".qn").textContent + (r.querySelector(".qbadge") ? "（当前）" : ""))])) : null;
+      `),
+    );
+    check(
+      "文件 › 快速打开… lists the group's files, the current one marked, then five recent ones",
+      !!shownInPalette && shownInPalette["已打开"]?.length === 2 && shownInPalette["已打开"].includes(`${readName}（当前）`) && shownInPalette["最近"]?.length === 5,
+      JSON.stringify(shownInPalette),
+    );
+    await Bun.sleep(1000);
+    await palette.capture("e2e-tabs-quick-open");
+    await typeQuery("超级");
+    const narrowed = await settled("the query to narrow the list", () =>
+      palette.page<string | null>(`const r = [...document.querySelectorAll(".qit")]; return r.length === 1 ? r[0].querySelector(".qn").innerHTML : null`),
+    );
+    check("typing narrows the palette and bolds the matched run", narrowed === "<b>超级</b>代码块.md", String(narrowed));
+    await typeQuery("e2e 新笔记");
+    const none = await settled("the no-match row", () => palette.page<string | null>(`return document.querySelector(".qnone")?.textContent ?? null`));
+    await palette.page(`document.querySelector("#qo-in").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))`);
+    const made = await settled("the new file's tab", async () => (await s.windows()).find((w) => w.title === "e2e 新笔记.md"));
+    check(
+      "a name that matches nothing offers 新建, and ↩ makes that file beside the current one and opens it",
+      none === "没有匹配的文件新建「e2e 新笔记.md」" && !!made && existsSync(join(dir, "e2e 新笔记.md")),
+      `${none}; ${(await s.windows()).map((w) => w.title).join(" / ")}`,
+    );
   });
 }
 

@@ -22,6 +22,7 @@ import { Dock } from "./Dock";
 import { Header, type ExportAction, type Popover } from "./Header";
 import { useDebouncedEffect, usePresence } from "./hooks";
 import { LightTable } from "./LightTable";
+import { QuickOpen } from "./QuickOpen";
 import { Lightbox } from "./Lightbox";
 import { ShareCard } from "./ShareCard";
 import { Toasts, useToasts } from "./Toasts";
@@ -72,7 +73,16 @@ export function App({ initial }: { initial: Initial }) {
   const closeOverview = useCallback(() => setOverview(false), []);
   const openOverview = () => {
     setPopover(null);
+    setFinding(false);
     setOverview(true);
+  };
+  const [finding, setFinding] = useState(false);
+  const palette = usePresence(finding, 200);
+  const closeFinder = useCallback(() => setFinding(false), []);
+  const openFinder = () => {
+    setPopover(null);
+    setOverview(false);
+    setFinding(true);
   };
 
   const showEd = mode === "edit" || mode === "split";
@@ -267,6 +277,10 @@ export function App({ initial }: { initial: Initial }) {
         if (overview) closeOverview();
         else openOverview();
         break;
+      case "quickOpen":
+        if (finding) closeFinder();
+        else openFinder();
+        break;
     }
   };
   useEffect(() => host.onCommand((c) => onCommand.current(c)), []);
@@ -334,6 +348,7 @@ export function App({ initial }: { initial: Initial }) {
         onToggleInline={() => updatePrefs({ inline: !prefs.inline })}
         onToggleFocus={() => setFocus(!focus)}
         onPopover={setPopover}
+        onQuickOpen={openFinder}
         onPrefs={updatePrefs}
         onExport={runExport}
         onKeepMine={() => void host.doc.keepMine().catch(() => {})}
@@ -362,6 +377,16 @@ export function App({ initial }: { initial: Initial }) {
         onNew={() => void host.files.new().catch(() => {})}
         onOverview={openOverview}
       />
+      {palette.mounted && (
+        <QuickOpen
+          files={files}
+          recent={recent}
+          leaving={palette.leaving}
+          onSelect={(id) => void host.files.select(id).catch(() => {})}
+          onOpenPath={openPath}
+          onClose={closeFinder}
+        />
+      )}
       {lightTable.mounted && (
         <LightTable
           files={files}

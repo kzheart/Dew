@@ -21,6 +21,7 @@ interface Props {
   onToggleInline(): void;
   onToggleFocus(): void;
   onPopover(p: Popover | null): void;
+  onQuickOpen(): void;
   onPrefs(p: Partial<Prefs>): void;
   onExport(a: ExportAction): void;
   onKeepMine(): void;
@@ -124,6 +125,9 @@ export function Header(p: Props) {
       <div className="bar-r">
         <div ref={right}>
           <div className="glass ig">
+            <button className="gbtn" onClick={p.onQuickOpen} aria-label="快速打开" title="快速打开 ⌘P">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            </button>
             <button className="gbtn" aria-pressed={p.focus} onClick={p.onToggleFocus} aria-label="聚光灯模式" title="聚光灯模式">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M3 9V5a2 2 0 0 1 2-2h4M15 3h4a2 2 0 0 1 2 2v4M21 15v4a2 2 0 0 1-2 2h-4M9 21H5a2 2 0 0 1-2-2v-4" /></svg>
             </button>
