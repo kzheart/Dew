@@ -10,3 +10,8 @@ mygo_windows_*.syso
 /dew-e2e
 /.playwright-cli
 /e2e-out
+
+# 本地的 AI 助手配置，不进入版本库
+/CLAUDE.md
+/.claude/
+/.agents/
