@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { RecentFile } from "../mygo";
-import { bucketOf, folderOf, rangeLabel, timeLabel, vapor } from "./recent";
+import { bucketOf, folderOf, rangeLabel, timeLabel, vapor, welcomeRows } from "./recent";
 
 const at = (month: number, day: number, h = 12, min = 0) => new Date(2026, month - 1, day, h, min).getTime();
 const now = at(11, 2, 16, 50);
@@ -67,4 +67,16 @@ test("by folder, files group under their folder's name", () => {
   const v = vapor([file("a.md", at(11, 2)), { ...file("b.md", at(11, 1)), path: "/x/个人/笔记/b.md" }], { ...opts, group: "folder" });
   expect(v.blocks.map((b) => b.kind === "grid" && `${b.label}:${b.count}`)).toEqual(["Dew / 文档:1", "个人 / 笔记:1"]);
   expect(v.scrub).toEqual([]);
+});
+
+test("the welcome page lists six recent files, the pinned ones first", () => {
+  const files = [
+    ...Array.from({ length: 7 }, (_, i) => file(`近-${i}.md`, at(11, 2, 16, 40 - i))),
+    file("钉住.md", at(10, 1), { pinned: true }),
+  ];
+  const rows = welcomeRows(files, now);
+  expect(rows.map((r) => r.name)).toEqual(["钉住.md", "近-0.md", "近-1.md", "近-2.md", "近-3.md", "近-4.md"]);
+  expect(rows[0]!.time).toBe("已钉住");
+  expect(rows[1]).toMatchObject({ folder: "Dew / 文档", time: "今天 16:40" });
+  expect(welcomeRows([], now)).toEqual([]);
 });

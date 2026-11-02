@@ -101,7 +101,10 @@ function RecentCard({ c, head, onOpen, onPin }: { c: Card; head: string | undefi
   );
 }
 
-/** 灯桌总览: the group's files as pages on a light table, to pick one, or to close one by dragging it away; below them, in the 水汽, the files closed lately, to reopen. */
+/**
+ * 灯桌总览: the group's files as pages on a light table, to pick one, or to close one by dragging it away; below them, in the 水汽, the files closed lately, to reopen.
+ * With no files, as on the welcome page, it is the 水汽 alone.
+ */
 export function LightTable({ files, recent, text, leaving, onSelect, onCloseFile, onReopen, onNew, onClose }: {
   files: ShownFile[];
   recent: RecentFile[];
@@ -129,6 +132,7 @@ export function LightTable({ files, recent, text, leaving, onSelect, onCloseFile
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [place, setPlace] = useState<{ scrolled: boolean; sec: Anchor }>({ scrolled: false, sec: "open" });
   const open = files.filter((f) => !f.closing);
+  const hasPages = files.length > 0;
 
   useEffect(() => {
     for (const f of files) {
@@ -188,6 +192,7 @@ export function LightTable({ files, recent, text, leaving, onSelect, onCloseFile
     return () => clearInterval(t);
   }, [recent]);
   const vap = useMemo(() => vapor(recent, { now, group, expanded, query: q }), [recent, now, group, expanded, q]);
+  const scrub = hasPages ? vap.scrub : vap.scrub.filter((x) => x.anchor !== "open");
 
   const shownCards = [...vap.pins, ...vap.blocks.flatMap((b) => (b.kind === "grid" ? b.cards : []))];
   useEffect(() => {
@@ -227,7 +232,7 @@ export function LightTable({ files, recent, text, leaving, onSelect, onCloseFile
   const pin = (path: string, pinned: boolean) => void host.recent.pin(path, pinned).catch(() => {});
 
   return (
-    <div className={`lt${leaving ? " out" : ""}${place.scrolled ? " scrolled" : ""}`} role="dialog" aria-modal="true" aria-label="灯桌总览">
+    <div className={`lt${leaving ? " out" : ""}${hasPages && place.scrolled ? " scrolled" : ""}`} role="dialog" aria-modal="true" aria-label="灯桌总览">
       <div className="glass lt-top">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#55555A" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
         <label htmlFor="lt-q" className="sr">筛选打开的和最近的文件</label>
@@ -236,7 +241,7 @@ export function LightTable({ files, recent, text, leaving, onSelect, onCloseFile
         <span className="lt-count">{open.length} 个打开 · {recent.length} 个最近</span>
       </div>
       <div className="lt-scroll" ref={scroller} onScroll={onScroll}>
-        <div className="lt-grid" data-anchor="open" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        {hasPages && <div className="lt-grid" data-anchor="open" onClick={(e) => e.target === e.currentTarget && onClose()}>
           {pages.map((f, i) => {
             const dragging = drag?.id === f.id;
             return (
@@ -256,8 +261,8 @@ export function LightTable({ files, recent, text, leaving, onSelect, onCloseFile
               </button>
             );
           })}
-          {!pages.length && <div className="vempty">{needle ? `没有名字含「${q.trim()}」的打开文件` : "没有打开的文件。点下方「新建」，或从水汽里找回一份。"}</div>}
-        </div>
+          {!pages.length && <div className="vempty">没有名字含「{q.trim()}」的打开文件</div>}
+        </div>}
 
         <section className={look === "list" ? "vap list" : "vap"} data-anchor="vap" aria-label="最近关闭的文件">
           <div className="vap-mist" aria-hidden="true" />
@@ -333,17 +338,17 @@ export function LightTable({ files, recent, text, leaving, onSelect, onCloseFile
         </section>
       </div>
 
-      <div className="glass lt-strip" aria-label="已打开的文件">
+      {hasPages && <div className="glass lt-strip" aria-label="已打开的文件">
         <span className="lsl">已打开</span>
         {open.map((f) => (
           <button key={f.id} className={f.current ? "on" : ""} onClick={() => onSelect(f.id)}>
             <span className="m14" aria-hidden="true"><Tear state={dropState(f)} /></span>{f.name}
           </button>
         ))}
-      </div>
-      {group === "time" && vap.scrub.length > 1 && (
+      </div>}
+      {group === "time" && scrub.length > 1 && (
         <nav className="scrub" aria-label="按时间跳转">
-          {vap.scrub.map((x) => (
+          {scrub.map((x) => (
             <button key={x.anchor} className={place.sec === x.anchor ? "on" : ""} onClick={() => go(x.target)}>{x.label}</button>
           ))}
         </nav>
@@ -355,7 +360,7 @@ export function LightTable({ files, recent, text, leaving, onSelect, onCloseFile
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>新建
       </button>
       <button className="glass lt-btn" style={{ right: 20 }} onClick={onClose}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>返回 {current?.name}
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>{current ? `返回 ${current.name}` : "返回"}
       </button>
     </div>
   );

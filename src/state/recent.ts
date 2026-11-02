@@ -200,3 +200,24 @@ export function vapor(files: RecentFile[], { now, group, expanded, query }: Vapo
     .map((a) => ({ anchor: a, label: anchorLabels[a], target: collapsedTo[a] ?? a }));
   return { pins, blocks, scrub };
 }
+
+/** How many recent files the welcome page lists. */
+const WELCOME_ROWS = 6;
+
+export interface WelcomeRow {
+  file: RecentFile;
+  name: string;
+  folder: string;
+  /** When it closed, or 已钉住. */
+  time: string;
+}
+
+/** The recent files the welcome page lists: pinned ones first, then the newest. */
+export function welcomeRows(files: RecentFile[], now: number): WelcomeRow[] {
+  return [...files.filter((f) => f.pinned), ...files.filter((f) => !f.pinned)].slice(0, WELCOME_ROWS).map((file) => ({
+    file,
+    name: fileName(file.path),
+    folder: folderOf(file.path),
+    time: file.pinned ? "已钉住" : timeLabel(file.closedAt, now),
+  }));
+}

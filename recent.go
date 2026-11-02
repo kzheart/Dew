@@ -29,7 +29,7 @@ type RecentFile struct {
 	Pinned   bool    `json:"pinned"`
 }
 
-// RecentFiles tells every document window the recent files, newest first,
+// RecentFiles tells every window the recent files, newest first,
 // as they change. Files open in some window are left out.
 var RecentFiles = mygo.NewEvent[[]RecentFile]("recent")
 
@@ -170,12 +170,12 @@ func (r *recentService) closed(gone *mygo.Window) []RecentFile {
 	return slices.DeleteFunc(r.store.list(r.keep()), func(f RecentFile) bool { return open[f.Path] })
 }
 
-// publish tells every document window the recent files, as they are
-// once gone has closed.
+// publish tells every window the recent files, as they are once gone has
+// closed: the document windows and the welcome window list them.
 func (r *recentService) publish(gone *mygo.Window) {
 	files := r.closed(gone)
 	for _, w := range mygo.Windows() {
-		if w != gone && r.docs.ForWindow(w) != nil {
+		if w != gone {
 			RecentFiles.Emit(w, files)
 		}
 	}

@@ -416,7 +416,7 @@ export const events = {
   /** Commands carries menu commands to the page of the focused window. */
   command: event<Command>("command"),
   /**
-   * RecentFiles tells every document window the recent files, newest first,
+   * RecentFiles tells every window the recent files, newest first,
    * as they change. Files open in some window are left out.
    */
   recent: event<RecentFile[]>("recent"),

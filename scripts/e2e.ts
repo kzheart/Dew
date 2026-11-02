@@ -6,7 +6,7 @@
  *
  *   bun scripts/e2e.ts [out-dir] [--no-build] [section ...]
  *
- * Sections are document, code, assist, share and tabs; with none named, all
+ * Sections are document, code, assist, share, tabs and welcome; with none named, all
  * of them run. Each starts its own launch on its own copies, so one can run
  * alone: after changing the dock, `bun scripts/e2e.ts tabs`. --no-build reuses
  * the last dist/ and dew-e2e, for reruns with no code changed in between.
@@ -29,6 +29,7 @@ const sections: Record<string, () => Promise<void>> = {
   assist: editAssistChecks,
   share: shareTableChecks,
   tabs: tabChecks,
+  welcome: welcomeChecks,
 };
 const args = process.argv.slice(2);
 const noBuild = args.includes("--no-build");
@@ -1197,6 +1198,99 @@ async function tabChecks() {
       none === "没有匹配的文件新建「e2e 新笔记.md」" && !!made && existsSync(join(dir, "e2e 新笔记.md")),
       `${none}; ${(await s.windows()).map((w) => w.title).join(" / ")}`,
     );
+  });
+}
+
+/** The welcome window the app shows while no document is open: its 最近 list, palette and light table, and 新建. */
+async function welcomeChecks() {
+  const dir = join(work, "welcome");
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, "版本说明.md");
+  await copyFile(join(root, "samples/版本说明.md"), path);
+
+  await session(path, async (s) => {
+    const settled = <T>(what: string, probe: () => Promise<T | null | undefined | false>) => waitFor(what, probe).catch(() => null);
+    const isWelcome = (id: number) => s.at(id).page<boolean>(`return !!document.querySelector('main[aria-label="欢迎"]')`).catch(() => false);
+    /** The one window open, once it is the welcome window. */
+    const welcomeAlone = () =>
+      settled("the welcome window alone", async () => {
+        const ws = await s.windows();
+        return ws.length === 1 && (await isWelcome(ws[0]!.id)) && ws[0]!;
+      });
+    const button = (label: string) => `[...document.querySelectorAll('main[aria-label="欢迎"] button')].find((b) => b.textContent.startsWith(${JSON.stringify(label)}))`;
+    const describe = async () => JSON.stringify(await Promise.all(((await s.windows()) ?? []).map(async (w) => ({ title: w.title, welcome: await isWelcome(w.id) }))));
+
+    const [doc] = await s.windows();
+    await s.page(`const el = document.querySelector(".pv-scroll"); el.scrollTop = 0.5 * (el.scrollHeight - el.clientHeight)`);
+    await Bun.sleep(700);
+    await s.menu("文件", "关闭");
+    const welcome = await welcomeAlone();
+    if (!welcome) return check("closing the last file leaves the welcome window", false, await describe());
+    const w = s.at(welcome.id);
+    const rows = await settled("the 最近 list", () => w.page<string[] | null>(`const r = [...document.querySelectorAll('section[aria-label="最近"] button')].map((b) => b.getAttribute("aria-label")); return r.length ? r : null`));
+    check(
+      "closing the last file leaves the welcome window where the file was, its 最近 listing the file",
+      JSON.stringify(welcome.bounds) === JSON.stringify(doc!.bounds) && rows?.join() === "重新打开 版本说明.md",
+      JSON.stringify({ doc: doc!.bounds, welcome: welcome.bounds, rows }),
+    );
+    await Bun.sleep(1000);
+    await w.capture("e2e-welcome");
+
+    await w.menu("文件", "快速打开…");
+    const groups = await settled("the palette", () =>
+      w.page<Record<string, string[]> | null>(`
+        const groups = [...document.querySelectorAll('.qlist [role="group"]')];
+        return groups.length ? Object.fromEntries(groups.map((g) => [g.getAttribute("aria-label"), [...g.querySelectorAll(".qn")].map((n) => n.textContent)])) : null;
+      `),
+    );
+    check("文件 › 快速打开… there lists only the recent files", JSON.stringify(groups) === JSON.stringify({ 最近: ["版本说明.md"] }), JSON.stringify(groups));
+    await w.page(`document.querySelector("#qo-in").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await settled("the palette to go", () => w.page<boolean>(`return !document.querySelector('[role="dialog"][aria-label="快速打开"]')`));
+
+    await w.page(`${button("灯桌")}.click()`);
+    const table = await settled("the light table", () =>
+      w.page<{ pages: number; cards: string[] } | null>(`
+        const lt = document.querySelector('[role="dialog"][aria-label="灯桌总览"]');
+        const cards = [...document.querySelectorAll('section[aria-label="最近关闭的文件"] button[aria-label$="点按重新打开"]')].map((c) => c.getAttribute("aria-label"));
+        return lt && cards.length ? { pages: lt.querySelectorAll(".lt-grid button").length, cards } : null;
+      `),
+    );
+    check("灯桌 there lays out the 水汽 alone, the file read to 50%", !!table && table.pages === 0 && table.cards.length === 1 && table.cards[0]!.includes("读到 50%"), JSON.stringify(table));
+    await Bun.sleep(1200);
+    await w.capture("e2e-welcome-light-table");
+    await w.page(`[...document.querySelectorAll('[aria-label="灯桌总览"] button')].find((b) => b.textContent === "返回").click()`);
+    const back = await settled("the light table to go", () => w.page<boolean>(`return !document.querySelector('[role="dialog"][aria-label="灯桌总览"]')`));
+    check("its 返回 goes back to the welcome page", !!back);
+
+    await w.page(`document.querySelector('section[aria-label="最近"] button').click()`);
+    let ratio: number | null = null;
+    const reopened = await settled("the file to reopen where it was read", async () => {
+      const ws = await s.windows();
+      if (ws.length !== 1 || ws[0]!.title !== "版本说明.md") return null;
+      ratio = await s.at(ws[0]!.id).page<number>(`const el = document.querySelector(".pv-scroll"); return el ? el.scrollTop / (el.scrollHeight - el.clientHeight) : -1`);
+      return Math.abs(ratio - 0.5) < 0.02 && ws[0]!;
+    });
+    check("its 最近 row reopens the file in the welcome window's place, scrolled back to 50%", !!reopened && JSON.stringify(reopened.bounds) === JSON.stringify(welcome.bounds), `ratio ${ratio}; ${await describe()}`);
+    if (!reopened) return;
+
+    await s.at(reopened.id).menu("文件", "关闭");
+    const again = await welcomeAlone();
+    if (!again) return check("closing the file again leaves the welcome window", false, await describe());
+    await s.at(again.id).page(`${button("新建")}.click()`);
+    const untitled = await settled("an untitled file in the welcome window's place", async () => {
+      const ws = await s.windows();
+      return ws.length === 1 && !(await isWelcome(ws[0]!.id)) && (await currentFile(s.at(ws[0]!.id).page).catch(() => undefined))?.tear === "empty" && ws[0]!;
+    });
+    check("新建 opens an untitled file, and the welcome window goes away", !!untitled, await describe());
+    if (!untitled) return;
+
+    await s.at(untitled.id).menu("文件", "关闭");
+    const last = await welcomeAlone();
+    if (!last) return check("closing the untitled file leaves the welcome window", false, await describe());
+    await s.at(last.id).menu("文件", "关闭");
+    await Bun.sleep(1500);
+    const left = (await s.windows()) ?? [];
+    check("文件 › 关闭 on the welcome window closes it for good, the app still running", left.length === 0, await describe());
   });
 }
 
