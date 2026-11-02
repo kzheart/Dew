@@ -14,6 +14,8 @@ import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { classifyPaste } from "../src/assist/paste";
+import { slashCommands } from "../src/assist/slash";
 import { Automation } from "./automation";
 
 const root = resolve(import.meta.dir, "..");
@@ -327,6 +329,231 @@ await session(superFile, async ({ page, capture, menu }) => {
   check("the PDF export prints the charts, not their source", drawn, `${await Bun.file(pdf).size} bytes${printed.includes("@startuml") ? ", PlantUML as source" : ""}`);
   await $`pdftoppm -r 60 -png ${pdf} ${join(out, "e2e-super-pdf")}`;
 });
+
+/**
+ * 斜杠命令, 成对符号包裹 and 智能剪贴板 on another copy of 版本说明.md. Typing
+ * goes through CodeMirror's own input path (its input handlers, then an
+ * input.type transaction), keys are keydown events on the editor, and pastes
+ * are paste events carrying a DataTransfer built in the page: the app is not
+ * frontmost while it runs, so neither real keystrokes nor 编辑 › 粘贴 reach it.
+ */
+async function editAssistChecks() {
+  const assistFile = join(work, "辅助编辑.md");
+  await copyFile(join(root, "samples/版本说明.md"), assistFile);
+  const fixture = (name: string) => readFile(join(root, "src/assist/fixtures", name), "utf8");
+  const fx = { safariHtml: await fixture("safari.html"), safariText: await fixture("safari.txt"), excelHtml: await fixture("excel.html"), excelText: await fixture("excel.txt") };
+  const expected = (html: string, text: string) => {
+    const p = classifyPaste({ text, html, hasImage: false }, "");
+    return p.kind === "plain" || p.kind === "image" ? "" : p.markdown;
+  };
+  const starter = slashCommands.find((c) => c.id === "table")!.insert().text;
+
+  await session(assistFile, async ({ page, capture, menu }) => {
+    const live = ".act .cm-content";
+    const source = ".ed .cm-content";
+    await page(`
+      const view = (sel) => document.querySelector(sel).cmTile.root.view;
+      window.e2e = {
+        view,
+        doc: (sel) => view(sel).state.doc.toString(),
+        line: (sel) => { const v = view(sel); return v.state.doc.lineAt(v.state.selection.main.head).text; },
+        select(sel, text) { const v = view(sel); const i = v.state.doc.toString().indexOf(text); v.focus(); v.dispatch({ selection: { anchor: i, head: i + text.length } }); },
+        newLine(sel) { const v = view(sel); const end = v.state.doc.length; v.focus(); v.dispatch({ changes: { from: end, insert: "\\n\\n" }, selection: { anchor: end + 2 } }); },
+        type(sel, text) {
+          const v = view(sel);
+          for (const ch of text) {
+            const { from, to } = v.state.selection.main;
+            const insert = () => v.state.update({ changes: { from, to, insert: ch }, selection: { anchor: from + ch.length }, userEvent: "input.type", scrollIntoView: true });
+            if (!v.state.facet(v.constructor.inputHandler).some((h) => h(v, from, to, ch, insert))) v.dispatch(insert());
+          }
+        },
+        key: (sel, key, mods = {}) => document.querySelector(sel).dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...mods })),
+        paste(sel, data, image) {
+          const dt = new DataTransfer();
+          for (const [k, v] of Object.entries(data)) dt.setData(k, v);
+          if (image) dt.items.add(image);
+          const e = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+          document.querySelector(sel).dispatchEvent(e);
+          return e.defaultPrevented;
+        },
+        menu: () => [...document.querySelectorAll(".cm-tooltip.slash .smi")].map((i) => (i.getAttribute("aria-selected") === "true" ? "*" : "") + i.querySelector("b").textContent),
+        toasts: () => [...document.querySelectorAll(".toast:not(.out)")].map((t) => [t.querySelector("b").textContent, t.querySelector("small").textContent, t.querySelector(".toast-act")?.textContent ?? ""].join(" | ")),
+        act: (label) => [...document.querySelectorAll(".toast-act")].findLast((b) => b.textContent === label).click(),
+      };
+    `);
+    const e2e = <T = any>(call: string) => page<T>(`return e2e.${call}`);
+    const undo = (sel: string) => e2e(`key(${JSON.stringify(sel)}, "z", { metaKey: true })`);
+
+    // 斜杠命令 in live mode: "/" on a new line of a block, filtered to 表格, Enter inserts it.
+    await menu("视图", "实时");
+    await settle();
+    const tables = await page<number>(`return document.querySelectorAll("article table").length`);
+    await page(`
+      const p = document.querySelector('article p[data-src="10"]');
+      const r = p.getBoundingClientRect();
+      p.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: r.right - 2, clientY: r.top + r.height / 2 }));
+    `);
+    await waitFor("the live editor", () => page<boolean>(`return !!document.querySelector(".act .cm-content")`));
+    await e2e(`newLine(${JSON.stringify(live)})`);
+    await e2e(`type(${JSON.stringify(live)}, "/")`);
+    await settle();
+    const opened = await e2e<string[]>("menu()");
+    check("/ on an empty line of a live block opens the slash menu", opened.length === 13 && opened[0] === "*代码块" && opened.includes("表格") && opened.includes("Mermaid 图表"), opened.join(" "));
+    await capture("edit-e2e-slash-live");
+    await e2e(`type(${JSON.stringify(live)}, "tab")`);
+    await settle();
+    const filtered = await e2e<string[]>("menu()");
+    check("typing tab filters the menu to 表格", filtered.join() === "*表格", filtered.join(" "));
+    await capture("edit-e2e-slash-live-filter");
+    await e2e(`key(${JSON.stringify(live)}, "Enter")`);
+    await settle();
+    const inserted = await page<{ doc: string; line: string; col: number; open: boolean }>(`
+      const v = e2e.view(".act .cm-content");
+      const head = v.state.selection.main.head;
+      const line = v.state.doc.lineAt(head);
+      return { doc: v.state.doc.toString(), line: line.text, col: head - line.from, open: !!document.querySelector(".cm-tooltip.slash") };
+    `);
+    check(
+      "Enter inserts a 3 × 3 table with the caret in its first header cell",
+      inserted.doc.includes(`\n\n${starter}`) && !inserted.doc.includes("/tab") && inserted.line === starter.split("\n")[0] && inserted.col === 2 && !inserted.open,
+      JSON.stringify({ line: inserted.line, col: inserted.col, open: inserted.open }),
+    );
+    await e2e(`key(${JSON.stringify(live)}, "Escape")`);
+    await settle();
+    const drawn = await page<{ tables: number; empty: boolean }>(`
+      const t = [...document.querySelectorAll("article table")];
+      return { tables: t.length, empty: t.some((x) => x.querySelectorAll("th").length === 3 && x.querySelectorAll("tbody tr").length === 3 && !x.textContent.trim()) };
+    `);
+    check("leaving the block draws the new table", drawn.tables === tables + 1 && drawn.empty, JSON.stringify(drawn));
+
+    // 斜杠命令 in source mode: ↓ moves the selection, Esc closes the menu and keeps the "/".
+    await menu("视图", "源码");
+    await settle();
+    await e2e(`newLine(${JSON.stringify(source)})`);
+    await e2e(`type(${JSON.stringify(source)}, "/")`);
+    await e2e(`key(${JSON.stringify(source)}, "ArrowDown")`);
+    await settle();
+    const moved = await e2e<string[]>("menu()");
+    check("the source editor's slash menu opens and ↓ selects the next item", moved.length === 13 && moved[1] === "*表格", moved.slice(0, 3).join(" "));
+    await capture("edit-e2e-slash-source");
+    await e2e(`key(${JSON.stringify(source)}, "Escape")`);
+    await settle();
+    const closedMenu = await page<{ open: boolean; line: string }>(`return { open: !!document.querySelector(".cm-tooltip.slash"), line: e2e.line(".ed .cm-content") }`);
+    check("Esc closes the menu and leaves the typed /", !closedMenu.open && closedMenu.line === "/", JSON.stringify(closedMenu));
+    await undo(source);
+
+    // 成对符号包裹: each key wraps the selection, and one ⌘Z gives back the plain word.
+    const word = "编辑与预览";
+    const pairs: [string, string][] = [
+      ["`", "`编辑与预览`"],
+      ["*", "**编辑与预览**"],
+      ["[", "[编辑与预览]()"],
+      ["$", "$编辑与预览$"],
+    ];
+    for (const [key, wrapped] of pairs) {
+      const before = await e2e<string>(`doc(${JSON.stringify(source)})`);
+      await e2e(`select(${JSON.stringify(source)}, ${JSON.stringify(word)})`);
+      await e2e(`type(${JSON.stringify(source)}, ${JSON.stringify(key)})`);
+      const after = await page<{ doc: string; selected: string; caretAfter: string }>(`
+        const v = e2e.view(".ed .cm-content");
+        const s = v.state.selection.main;
+        return { doc: v.state.doc.toString(), selected: v.state.sliceDoc(s.from, s.to), caretAfter: v.state.sliceDoc(s.head, s.head + 1) };
+      `);
+      if (key === "[") await capture("edit-e2e-wrap-link");
+      await undo(source);
+      const back = await page<{ doc: string; selected: string }>(`const v = e2e.view(".ed .cm-content"); const s = v.state.selection.main; return { doc: v.state.doc.toString(), selected: v.state.sliceDoc(s.from, s.to) }`);
+      const placed = key === "[" ? after.selected === "" && after.caretAfter === ")" : after.selected === word;
+      check(`${key} wraps the selection as ${wrapped} and ⌘Z unwraps it`, after.doc === before.replace(word, wrapped) && placed && back.doc === before && back.selected === word, JSON.stringify({ selected: after.selected, back: back.selected }));
+    }
+
+    // 智能剪贴板: a URL over a selection, rich text from Safari, a range from Excel, plain TSV.
+    const url = "https://dew.app/sync";
+    await e2e(`select(${JSON.stringify(source)}, ${JSON.stringify(word)})`);
+    await e2e(`paste(${JSON.stringify(source)}, { "text/plain": ${JSON.stringify(url)} })`);
+    await settle();
+    const linked = await e2e<string>(`doc(${JSON.stringify(source)})`);
+    const linkToast = await e2e<string[]>("toasts()");
+    check("a URL pasted over a selection becomes a link, with a toast", linked.includes(`[${word}](${url})`) && linkToast.includes(`已合成链接 | [${word}](${url}) | 撤销`), linkToast.join(" / "));
+    await e2e(`act("撤销")`);
+    await settle();
+    const unlinked = await e2e<string>(`doc(${JSON.stringify(source)})`);
+    check("撤销 turns the link back into the pasted URL", unlinked.includes(`让${url}真正`) && !unlinked.includes(`](${url})`) && !(await e2e<string[]>("toasts()")).some((t) => t.startsWith("已合成链接")));
+
+    const rich = expected(fx.safariHtml, fx.safariText);
+    await e2e(`newLine(${JSON.stringify(source)})`);
+    await e2e(`paste(${JSON.stringify(source)}, { "text/html": ${JSON.stringify(fx.safariHtml)}, "text/plain": ${JSON.stringify(fx.safariText)} })`);
+    await settle();
+    const richToast = await e2e<string[]>("toasts()");
+    check("rich text from Safari is pasted as Markdown, with a toast", !!rich && (await e2e<string>(`doc(${JSON.stringify(source)})`)).endsWith(rich) && richToast.includes("富文本已转为 Markdown | 保留标题、列表、加粗与链接，清除内联样式 | 撤销"), richToast.join(" / "));
+    await e2e(`act("撤销")`);
+    await settle();
+    const plainRich = await e2e<string>(`doc(${JSON.stringify(source)})`);
+    check("撤销 pastes the rich text's plain text instead", plainRich.endsWith(fx.safariText.replace(/\r\n?/g, "\n")) && !plainRich.includes(rich));
+
+    const sheet = expected(fx.excelHtml, fx.excelText);
+    await e2e(`newLine(${JSON.stringify(source)})`);
+    const beforeSheet = await e2e<string>(`doc(${JSON.stringify(source)})`);
+    await e2e(`paste(${JSON.stringify(source)}, { "text/html": ${JSON.stringify(fx.excelHtml)}, "text/plain": ${JSON.stringify(fx.excelText)} })`);
+    await settle();
+    const sheetToast = (await e2e<string[]>("toasts()")).find((t) => t.startsWith("表格已转换并对齐")) ?? "";
+    check("cells copied from Excel are pasted as an aligned table, with a toast", !!sheet && (await e2e<string>(`doc(${JSON.stringify(source)})`)) === beforeSheet + sheet && sheetToast.includes("来自 Excel · 4 列 × 5 行"), sheetToast);
+    await undo(source);
+    await settle();
+    check("one ⌘Z takes the whole table back out", (await e2e<string>(`doc(${JSON.stringify(source)})`)) === beforeSheet && !(await e2e<string[]>("toasts()")).some((t) => t.startsWith("表格已转换并对齐")));
+
+    await e2e(`paste(${JSON.stringify(source)}, { "text/plain": ${JSON.stringify(fx.excelText)} })`);
+    await settle();
+    const tsvToast = (await e2e<string[]>("toasts()")).find((t) => t.startsWith("表格已转换并对齐")) ?? "";
+    check("tab-separated text is pasted as the same aligned table", (await e2e<string>(`doc(${JSON.stringify(source)})`)) === beforeSheet + sheet && tsvToast.includes("来自表格 · 4 列 × 5 行"), tsvToast);
+    await capture("edit-e2e-paste-toasts");
+
+    // A screenshot lands in assets/ beside the document and shows in the preview and the PDF.
+    await e2e(`newLine(${JSON.stringify(source)})`);
+    await page(`
+      const c = document.createElement("canvas");
+      c.width = 320;
+      c.height = 120;
+      const g = c.getContext("2d");
+      g.fillStyle = "#0A66D8";
+      g.fillRect(0, 0, 320, 120);
+      g.fillStyle = "#fff";
+      g.font = "28px sans-serif";
+      g.fillText("e2e 截图", 100, 70);
+      const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+      e2e.paste(".ed .cm-content", {}, new File([blob], "image.png", { type: "image/png" }));
+    `);
+    const imageToast = await waitFor("the image toast", async () => (await e2e<string[]>("toasts()")).find((t) => t.startsWith("截图已转存")), 10000).catch(() => "");
+    const rel = /\.\/assets\/paste-\d{8}-\d{6}(-\d+)?\.png/.exec(imageToast)?.[0] ?? "";
+    const png = rel ? join(work, rel) : "";
+    const sig = png && existsSync(png) ? Buffer.from(await Bun.file(png).slice(0, 8).arrayBuffer()).toString("hex") : "";
+    check(
+      "a pasted screenshot is saved to assets/ beside the document and linked",
+      !!rel && imageToast.endsWith("在访达中显示") && (await e2e<string>(`line(${JSON.stringify(source)})`)) === `![](${rel})` && sig === "89504e470d0a1a0a",
+      imageToast,
+    );
+    await capture("edit-e2e-image-toast");
+    await menu("视图", "预览");
+    const shown = await waitFor(
+      "the pasted image",
+      () => page<string>(`const i = [...document.querySelectorAll("article img")].find((x) => x.src.startsWith("docfile:")); if (!i) return ""; i.scrollIntoView({ block: "center" }); return i.complete && i.naturalWidth ? i.src + " " + i.naturalWidth : "";`),
+      10000,
+    ).catch(String);
+    check("the preview shows the pasted image from beside the document", shown.endsWith(" 320") && shown.includes(rel.slice(2)), shown);
+    await settle();
+    await capture("edit-e2e-image-preview");
+
+    await menu("文件", "保存");
+    await waitFor("the save", async () => (await page<string>(`return document.querySelector(".gtitle").textContent`)).includes("已保存"));
+    await menu("文件", "导出为 PDF…");
+    const pdf = join(work, "辅助编辑.pdf");
+    await waitFor("the PDF", async () => existsSync(pdf) && (await Bun.file(pdf).size) > 0, 20000);
+    await Bun.sleep(500);
+    const images = (await $`pdfimages -list ${pdf}`.text()).trim().split("\n").slice(2);
+    check("the PDF export embeds the pasted image", images.some((l) => /\s320\s+120\s/.test(l)), images.join(" / ") || "no images");
+  });
+}
+
+await editAssistChecks();
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed; captures in ${out}`);
