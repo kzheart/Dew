@@ -44,6 +44,8 @@ export async function inlineStyled(articleHtml: string, bg: string): Promise<str
       for (const a of [...el.attributes]) if (a.name === "class" || a.name.startsWith("data-") || a.name === "style") el.removeAttribute(a.name);
       if (styles[i]) el.setAttribute("style", styles[i]!);
     });
+    // Pasted back into Dew, this pastes as its Markdown rather than being converted again.
+    root.setAttribute("data-dew-rich", "");
     return root.outerHTML;
   } finally {
     host.remove();

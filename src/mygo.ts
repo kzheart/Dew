@@ -213,6 +213,26 @@ export const View = {
   },
 } as const;
 
+/**
+ * assetService keeps the images pasted into a document in the assets
+ * folder beside its file, and shows them in Finder.
+ */
+export const Assets = {
+  /** Reveal shows a file of the window's document's folder in Finder. */
+  reveal(rel: string): Promise<void> {
+    return call("Assets.Reveal", rel);
+  },
+  /**
+   * SaveImage writes an image pasted into the window's document to the
+   * assets folder beside the document's file, never over another file, and
+   * returns its path relative to the document, as Markdown links it. An
+   * untitled document is saved first; "" means the user canceled that.
+   */
+  saveImage(data: string, ext: string): Promise<string> {
+    return call("Assets.SaveImage", data, ext);
+  },
+} as const;
+
 // ---- Events ----
 
 /** Events sent by the Go side. Subscribe with `events.name.on(listener)`. */

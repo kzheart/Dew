@@ -203,7 +203,8 @@ const liveHighlight = HighlightStyle.define([
   ...codeTokens,
 ]);
 
-const markdownSupport = () => markdown({ base: markdownLanguage, codeLanguages: languages, extensions });
+// URLs pasted over a selection become links through the edit assists, which also offer 撤销.
+const markdownSupport = () => markdown({ base: markdownLanguage, codeLanguages: languages, extensions, pasteURLAsLink: false });
 
 export function markdownSyntax(): Extension {
   return [markdownSupport(), syntaxHighlighting(sourceHighlight)];

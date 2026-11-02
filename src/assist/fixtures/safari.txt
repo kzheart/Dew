@@ -1,0 +1,8 @@
+安装
+运行 bun add dew，然后在 文档中查看完整的选项。
+
+支持 macOS
+支持 Linux
+Ubuntu 24.04
+下载
+打开

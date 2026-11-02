@@ -1,7 +1,7 @@
 import { isolateHistory } from "@codemirror/commands";
-import { syntaxTree } from "@codemirror/language";
 import { EditorState, Prec, StateEffect, StateField, type Extension, type TransactionSpec } from "@codemirror/state";
 import { EditorView, keymap, showTooltip, type Tooltip, type TooltipView } from "@codemirror/view";
+import { inLiteral } from "./literal";
 import { insertion, matchCommands, slashQuery, type SlashCommand } from "./slash";
 
 /** An open menu: where its `/` is and which item is picked. The query is the text after the `/`. */
@@ -12,16 +12,6 @@ export interface SlashMenu {
 
 const select = StateEffect.define<number>();
 const close = StateEffect.define<null>();
-
-/** Code, math and raw HTML take a `/` literally. */
-const LITERAL = new Set(["FencedCode", "CodeBlock", "BlockMath", "HTMLBlock", "CommentBlock", "FrontMatter"]);
-
-function inLiteral(state: EditorState, pos: number): boolean {
-  for (let n: ReturnType<ReturnType<typeof syntaxTree>["resolveInner"]> | null = syntaxTree(state).resolveInner(pos, -1); n; n = n.parent) {
-    if (LITERAL.has(n.name)) return true;
-  }
-  return false;
-}
 
 /** The query of an open menu, or null once its line no longer reads `/query` up to the caret. */
 function queryOf(state: EditorState, menu: SlashMenu): string | null {

@@ -3,6 +3,7 @@ import { renderDiagrams } from "../diagram/engines";
 import { parseDocument, type Block } from "../markdown/parse";
 import { host, type Prefs } from "../platform";
 import { buildStandalone } from "./build";
+import { embeddingImages } from "./images";
 import { drawShareCard } from "./card";
 import { inlineStyled } from "./richText";
 import { baseName, documentTitle, renderArticle } from "./standalone";
@@ -23,7 +24,7 @@ export async function exportDocument(action: ExportAction, { text, fileName, pre
   switch (action) {
     case "pdf": {
       // Printed pages keep white margins, so the page is printed on white too.
-      const doc = parseDocument(text, { resolveImage });
+      const doc = parseDocument(text, { resolveImage: await embeddingImages(text, resolveImage) });
       return host.exports.pdf(await buildStandalone(doc, prefs, documentTitle(doc, fileName), "white"), name);
     }
     case "html": {

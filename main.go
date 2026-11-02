@@ -29,7 +29,8 @@ func main() {
 	mygo.BindAs("Prefs", &prefsStore{})
 	mygo.BindAs("Export", exportService{})
 	mygo.BindAs("View", &viewService{})
-	serveDocumentFiles()
+	mygo.BindAs("Assets", &assetService{docs: docs})
+	serveDocumentFiles(docs)
 
 	mygo.App.WhenReady(func() { mygo.App.SetMenu(newMenuBar()) })
 	if err := mygo.App.Run(); err != nil {

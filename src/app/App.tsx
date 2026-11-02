@@ -1,6 +1,7 @@
 import type { EditorView } from "@codemirror/view";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { editAssist } from "../assist/editAssist";
+import { encodeImage } from "../assist/image";
 import { flashLine, locateLine } from "../editor/render";
 import { SourceEditor, type Cursor } from "../editor/SourceEditor";
 import { exportDocument } from "../export/actions";
@@ -17,6 +18,7 @@ import { Divider, StatusBar, Toc } from "./Chrome";
 import { Header, type ExportAction, type Popover } from "./Header";
 import { useDebouncedEffect, usePresence } from "./hooks";
 import { Lightbox } from "./Lightbox";
+import { Toasts, useToasts } from "./Toasts";
 import { useDocument } from "./useDocument";
 import { useScrollSync } from "./useScrollSync";
 
@@ -47,8 +49,7 @@ export function App({ initial }: { initial: Initial }) {
   if (zoomed) lastZoomed.current = zoomed;
   const closeLightbox = useCallback(() => setZoomed(null), []);
 
-  const dir = doc.state.path ? doc.state.path.slice(0, doc.state.path.lastIndexOf("/")) : "";
-  const parsed = useMemo(() => parseDocument(doc.text, { resolveImage: (src) => resolveImage(src, dir) }), [doc.text, dir]);
+  const parsed = useMemo(() => parseDocument(doc.text, { resolveImage: host.imageURL }), [doc.text]);
 
   const showEd = mode === "edit" || mode === "split";
   const showPv = mode !== "edit";
@@ -135,7 +136,24 @@ export function App({ initial }: { initial: Initial }) {
     [prefs.showLn, prefs.bg, docName, edit],
   );
 
-  const assist = useMemo(() => editAssist(), []);
+  const toasts = useToasts();
+  const { notify } = toasts;
+  const { flush } = doc;
+  const assist = useMemo(
+    () =>
+      editAssist({
+        notify,
+        async saveImage(image) {
+          // An untitled document is saved first, with the text the page holds.
+          await flush();
+          const { base64, ext } = await encodeImage(image);
+          const path = await host.assets.saveImage(base64, ext);
+          return path ? { path } : { reason: "文稿还没有保存，截图没有存放的位置" };
+        },
+        reveal: (path) => void host.assets.reveal(path).catch((e) => console.error("reveal failed", e)),
+      }),
+    [notify, flush],
+  );
 
   const { live, label: liveLabel } = useLive({
     enabled: isLive,
@@ -151,7 +169,7 @@ export function App({ initial }: { initial: Initial }) {
 
   const runExport = (action: ExportAction) => {
     const selection = action === "shareCard" ? selectedPassage(edView.current) : "";
-    const source = { text: doc.text, fileName: doc.state.name, prefs, resolveImage: (src: string) => resolveImage(src, dir), selection };
+    const source = { text: doc.text, fileName: doc.state.name, prefs, resolveImage: host.imageURL, selection };
     void doc.flush().then(() => exportDocument(action, source)).catch((e) => console.error("export failed", e));
   };
 
@@ -272,14 +290,8 @@ export function App({ initial }: { initial: Initial }) {
           onClose={closeLightbox}
         />
       )}
+      <Toasts toasts={toasts.toasts} onDismiss={toasts.dismiss} />
       <StatusBar chars={parsed.stats.chars} minutes={parsed.stats.minutes} mode={mode} cursor={cursor} blockLabel={liveLabel} />
     </div>
   );
-}
-
-/** Relative image paths name files next to the document, which Go serves. */
-function resolveImage(src: string, dir: string): string {
-  if (!dir || /^[a-z][a-z0-9+.-]*:/i.test(src) || src.startsWith("//")) return src;
-  const path = src.startsWith("/") ? src : new URL(src, `file://${dir}/`).pathname;
-  return `docfile://localhost${path}`;
 }

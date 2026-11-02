@@ -1,0 +1,2 @@
+const total = a * b_rate;
+  return total;

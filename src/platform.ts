@@ -1,4 +1,5 @@
 import { isMyGo, onDocumentReload, onDocumentState } from "mygo-runtime";
+import { docFileURL } from "./app/docFile";
 import { defaultPrefs } from "./defaultPrefs";
 import * as go from "./mygo";
 import type { Command, DocumentState, Prefs, ViewState } from "./mygo";
@@ -26,6 +27,13 @@ export interface Host {
     shareCard(pngBase64: string, name: string): Promise<string>;
     svg(svg: string, name: string): Promise<string>;
   };
+  assets: {
+    /** Saves a pasted image beside the document; resolves to its relative path, or "" when the user would not save the document. */
+    saveImage(base64: string, ext: string): Promise<string>;
+    reveal(path: string): Promise<void>;
+  };
+  /** Where the page loads an image the document names by a path relative to itself. */
+  imageURL(src: string): string;
   onCommand(fn: (c: Command) => void): () => void;
   syncView(s: ViewState): void;
 }
@@ -45,6 +53,8 @@ function appHost(): Host {
     },
     prefs: go.Prefs,
     exports: go.Export,
+    assets: go.Assets,
+    imageURL: (src) => docFileURL(src) ?? src,
     onCommand: (fn) => go.events.command.on(fn),
     syncView: (s) => void go.View.sync(s).catch(() => {}),
   };
@@ -60,6 +70,7 @@ async function browserHost(): Promise<Host> {
   let text = await samples[path]!();
   let state: DocumentState = { name, path: "", edited: false, readOnly: false, conflict: false, deleted: false };
   const listeners = new Set<(s: DocumentState) => void>();
+  const pastedImages = new Map<string, string>();
   const setState = (s: DocumentState) => {
     state = s;
     listeners.forEach((fn) => fn(s));
@@ -90,6 +101,16 @@ async function browserHost(): Promise<Host> {
       shareCard: async () => "",
       svg: async () => "",
     },
+    // Pasted images stay in memory, under the path the app would have saved them at.
+    assets: {
+      saveImage: async (base64, ext) => {
+        const path = `./assets/paste-${pastedImages.size + 1}.${ext}`;
+        pastedImages.set(path, `data:image/${ext === "jpg" ? "jpeg" : ext};base64,${base64}`);
+        return path;
+      },
+      reveal: async () => {},
+    },
+    imageURL: (src) => pastedImages.get(src) ?? src,
     onCommand: () => () => {},
     syncView: () => {},
   };
