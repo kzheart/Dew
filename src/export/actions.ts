@@ -1,10 +1,9 @@
 import type { ExportAction } from "../app/Header";
 import { renderDiagrams } from "../diagram/engines";
-import { parseDocument, type Block } from "../markdown/parse";
+import { parseDocument } from "../markdown/parse";
 import { host, type Prefs } from "../platform";
 import { buildStandalone } from "./build";
 import { embeddingImages } from "./images";
-import { drawShareCard } from "./card";
 import { inlineStyled } from "./richText";
 import { baseName, documentTitle, renderArticle } from "./standalone";
 
@@ -14,18 +13,16 @@ interface Source {
   prefs: Prefs;
   /** How the app shows images next to the document; a saved HTML file keeps the original paths instead. */
   resolveImage(src: string): string;
-  /** The text the user selected, which a share card shows. */
-  selection: string;
 }
 
 /** Runs a document export; resolves to the saved path, or "" when nothing was saved. */
-export async function exportDocument(action: ExportAction, { text, fileName, prefs, resolveImage, selection }: Source): Promise<string> {
+export async function exportDocument(action: Exclude<ExportAction, "shareCard">, { text, fileName, prefs, resolveImage }: Source): Promise<string> {
   const name = baseName(fileName);
   switch (action) {
     case "pdf": {
       // Printed pages keep white margins, so the page is printed on white too.
       const doc = parseDocument(text, { resolveImage: await embeddingImages(text, resolveImage) });
-      return host.exports.pdf(await buildStandalone(doc, prefs, documentTitle(doc, fileName), "white"), name);
+      return host.exports.pdf(await buildStandalone(doc, prefs, documentTitle(doc, fileName), "white", { pdf: true }), name);
     }
     case "html": {
       const doc = parseDocument(text);
@@ -37,17 +34,6 @@ export async function exportDocument(action: ExportAction, { text, fileName, pre
       await host.exports.richText(await inlineStyled(renderArticle(doc, prefs, prefs.bg), prefs.bg), text);
       return "";
     }
-    case "shareCard": {
-      const doc = parseDocument(text);
-      const passage = selection.trim() || firstParagraph(doc.blocks);
-      const png = drawShareCard({ title: documentTitle(doc, fileName), text: passage, fileName: fileName || "未命名" });
-      return host.exports.shareCard(png, `${name}-分享卡片`);
-    }
   }
 }
 
-/** With nothing selected, a card shows the document's first paragraph. */
-function firstParagraph(blocks: Block[]): string {
-  const p = blocks.find((b) => b.kind === "paragraph");
-  return p ? new DOMParser().parseFromString(p.html, "text/html").body.textContent ?? "" : "";
-}

@@ -5,8 +5,9 @@ import { encodeImage } from "../assist/image";
 import { flashLine, locateLine } from "../editor/render";
 import { SourceEditor, type Cursor } from "../editor/SourceEditor";
 import { exportDocument } from "../export/actions";
+import type { CardContent } from "../export/card";
+import { selectedCard } from "../export/selection";
 import { baseName } from "../export/standalone";
-import { selectedPassage } from "../export/selection";
 import { useLive } from "../live/useLive";
 import { parseDocument } from "../markdown/parse";
 import { toggleTask } from "../markdown/source";
@@ -18,6 +19,7 @@ import { Divider, StatusBar, Toc } from "./Chrome";
 import { Header, type ExportAction, type Popover } from "./Header";
 import { useDebouncedEffect, usePresence } from "./hooks";
 import { Lightbox } from "./Lightbox";
+import { ShareCard } from "./ShareCard";
 import { Toasts, useToasts } from "./Toasts";
 import { useDocument } from "./useDocument";
 import { useScrollSync } from "./useScrollSync";
@@ -48,6 +50,11 @@ export function App({ initial }: { initial: Initial }) {
   const lastZoomed = useRef<LightboxTarget | null>(null);
   if (zoomed) lastZoomed.current = zoomed;
   const closeLightbox = useCallback(() => setZoomed(null), []);
+  const [card, setCard] = useState<CardContent | null>(null);
+  const sharing = usePresence(card !== null, 200);
+  const lastCard = useRef<CardContent | null>(null);
+  if (card) lastCard.current = card;
+  const closeCard = useCallback(() => setCard(null), []);
 
   const parsed = useMemo(() => parseDocument(doc.text, { resolveImage: host.imageURL }), [doc.text]);
 
@@ -120,22 +127,6 @@ export function App({ initial }: { initial: Initial }) {
 
   const { edit } = doc;
   const docName = doc.state.name;
-  const actions: BlockActions = useMemo(
-    () => ({
-      interactive: true,
-      showLineNumbers: prefs.showLn,
-      onToggleLineNumbers: () => setPrefs((p) => ({ ...p, showLn: !p.showLn })),
-      onToggleTask: (line) => {
-        edit((t) => toggleTask(t, line));
-        if (edView.current) flashLine(edView.current, line, 1200);
-      },
-      onZoom: setZoomed,
-      theme: prefs.bg,
-      onExportSvg: (svg, engine) => void host.exports.svg(svg, `${baseName(docName)}-${engine}`).catch((e) => console.error("SVG export failed", e)),
-    }),
-    [prefs.showLn, prefs.bg, docName, edit],
-  );
-
   const toasts = useToasts();
   const { notify } = toasts;
   const { flush } = doc;
@@ -155,7 +146,7 @@ export function App({ initial }: { initial: Initial }) {
     [notify, flush],
   );
 
-  const { live, label: liveLabel } = useLive({
+  const { live, label: liveLabel, editTable } = useLive({
     enabled: isLive,
     doc: parsed,
     text: doc.text,
@@ -166,10 +157,29 @@ export function App({ initial }: { initial: Initial }) {
     article: articleRef,
     onCaret: setCursor,
   });
+  const actions: BlockActions = useMemo(
+    () => ({
+      interactive: true,
+      showLineNumbers: prefs.showLn,
+      onToggleLineNumbers: () => setPrefs((p) => ({ ...p, showLn: !p.showLn })),
+      onToggleTask: (line) => {
+        edit((t) => toggleTask(t, line));
+        if (edView.current) flashLine(edView.current, line, 1200);
+      },
+      onZoom: setZoomed,
+      theme: prefs.bg,
+      onExportSvg: (svg, engine) => void host.exports.svg(svg, `${baseName(docName)}-${engine}`).catch((e) => console.error("SVG export failed", e)),
+      onEditTable: isLive ? editTable : undefined,
+    }),
+    [prefs.showLn, prefs.bg, docName, edit, isLive, editTable],
+  );
 
   const runExport = (action: ExportAction) => {
-    const selection = action === "shareCard" ? selectedPassage(edView.current) : "";
-    const source = { text: doc.text, fileName: doc.state.name, prefs, resolveImage: host.imageURL, selection };
+    if (action === "shareCard") {
+      setCard(selectedCard({ doc: parsed, text: doc.text, fileName: docName, editor: edView.current }));
+      return;
+    }
+    const source = { text: doc.text, fileName: docName, prefs, resolveImage: host.imageURL };
     void doc.flush().then(() => exportDocument(action, source)).catch((e) => console.error("export failed", e));
   };
 
@@ -289,6 +299,9 @@ export function App({ initial }: { initial: Initial }) {
           leaving={lightbox.leaving}
           onClose={closeLightbox}
         />
+      )}
+      {sharing.mounted && lastCard.current && (
+        <ShareCard content={lastCard.current} prefs={prefs} fileName={docName} leaving={sharing.leaving} onPrefs={updatePrefs} onClose={closeCard} />
       )}
       <Toasts toasts={toasts.toasts} onDismiss={toasts.dismiss} />
       <StatusBar chars={parsed.stats.chars} minutes={parsed.stats.minutes} mode={mode} cursor={cursor} blockLabel={liveLabel} />

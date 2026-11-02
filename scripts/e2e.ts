@@ -192,17 +192,21 @@ await session(file, async ({ page, capture, menu, text }) => {
   await settle();
   check("Escape closes the lightbox", !(await page<boolean>(`return !!document.querySelector(".lb")`)));
 
-  // The share card writes its PNG to the clipboard as well as to the file.
+  // The share card opens on the selection, and 保存… writes its PNG.
   await page(`
     const p = document.querySelector('article p[data-src="47"]');
     getSelection().selectAllChildren(p);
   `);
   await menu("文件", "将选区生成分享卡片…");
+  await waitFor("the share card dialog", () => page<boolean>(`return !!document.querySelector(".share-save")`));
+  await page(`document.querySelector(".share-save").click()`);
   const card = join(work, "版本说明-分享卡片.png");
   await waitFor("the share card", async () => existsSync(card) && (await Bun.file(card).size) > 0, 10000);
   const sig = Buffer.from(await Bun.file(card).slice(0, 8).arrayBuffer()).toString("hex");
-  check("文件 › 将选区生成分享卡片… saves a PNG", sig === "89504e470d0a1a0a", `${await Bun.file(card).size} bytes`);
+  check("文件 › 将选区生成分享卡片… opens the card, whose 保存… saves a PNG", sig === "89504e470d0a1a0a", `${await Bun.file(card).size} bytes`);
   await copyFile(card, join(out, "e2e-share-card.png"));
+  await page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+  await settle();
 
   // Another app changes the file while the page has no unsaved edits: the page reloads it.
   await menu("文件", "保存");
@@ -394,6 +398,8 @@ async function editAssistChecks() {
       p.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: r.right - 2, clientY: r.top + r.height / 2 }));
     `);
     await waitFor("the live editor", () => page<boolean>(`return !!document.querySelector(".act .cm-content")`));
+    // The block editor places its caret once it has mounted; typing before that races it.
+    await settle();
     await e2e(`newLine(${JSON.stringify(live)})`);
     await e2e(`type(${JSON.stringify(live)}, "/")`);
     await settle();
@@ -554,6 +560,176 @@ async function editAssistChecks() {
 }
 
 await editAssistChecks();
+
+await shareTableChecks();
+
+/** Live mode's table controls, the share card dialog and its clipboard image, and the PDF's page protection. */
+async function shareTableChecks() {
+  const md = join(work, "表格与分享.md");
+  await writeFile(
+    md,
+    ["# 表格与分享", "", "| 名称 | 说明 | 数量 |", "| --- | --- | --- |", "| 苹果 | 红色的水果 | 3 |", "| 香蕉 | 黄色 | 12 |", "", "```ts", "export function sync(src: Pane) {", "  return src.top;", "}", "```", ""].join("\n"),
+  );
+  await session(md, async ({ page, capture, menu, text }) => {
+    const content = () => page<string>(`return await mygo.call("Doc.Content")`);
+    const table = async () => (await content()).split("\n").filter((l) => l.startsWith("|"));
+    // Pointer events at a spot given relative to the table, which the controls read from the rendered table.
+    const geometry = `
+      const blk = document.querySelector(".tbl-blk");
+      const box = blk.querySelector("table").getBoundingClientRect();
+      const ths = [...blk.querySelectorAll("thead th")].map((t) => t.getBoundingClientRect());
+      const head = blk.querySelector("thead").getBoundingClientRect();
+      const move = (x, y) => blk.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: x, clientY: y }));
+    `;
+    const aligned = (rows: string[]) => new Set(rows.map((r) => [...r].reduce((w, c) => w + (/[一-鿿]/.test(c) ? 2 : 1), 0))).size === 1;
+    await page(`document.querySelector(".tbl-blk").scrollIntoView({ block: "center" })`);
+    await settle();
+
+    await page(`${geometry} move(ths[0].right, box.top - 10)`);
+    await settle();
+    await capture("e2e-table-plus-column");
+    await page(`document.querySelector('.ta-plus[aria-label="在此插入列"]').click()`);
+    await settle();
+    const withColumn = await table();
+    check("+ on the table's top edge inserts a column there, and the source stays aligned", withColumn.length === 4 && withColumn[0]!.split("|").length === 6 && withColumn[0]!.split("|")[2]!.trim() === "" && aligned(withColumn), withColumn[0]);
+
+    await page(`${geometry} move(box.left - 8, head.bottom + 1)`);
+    await settle();
+    await page(`document.querySelector('.ta-plus[aria-label="在此插入行"]').click()`);
+    await settle();
+    const withRow = await table();
+    check("+ on the table's left edge inserts a row there", withRow.length === 5 && withRow[2]!.replace(/[|\s]/g, "") === "" && withRow[3]!.includes("苹果") && aligned(withRow), withRow[2]);
+
+    const before = withRow[1]!;
+    await page(`${geometry} move(ths[0].right, (box.top + box.bottom) / 2)`);
+    await settle();
+    await page(`
+      const b = document.querySelector(".ta-border").getBoundingClientRect();
+      const x = b.left + b.width / 2, y = b.top + b.height / 2;
+      document.querySelector(".ta-border").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: x, clientY: y }));
+      window.dispatchEvent(new PointerEvent("pointermove", { clientX: x + 30, clientY: y }));
+      window.dispatchEvent(new PointerEvent("pointermove", { clientX: x + 60, clientY: y }));
+    `);
+    await settle();
+    const tip = await page<string>(`return document.querySelector(".ta-tip")?.textContent ?? ""`);
+    await capture("e2e-table-resize");
+    await page(`window.dispatchEvent(new PointerEvent("pointerup", {}))`);
+    await settle();
+    const resized = await table();
+    const fixed = await page<boolean>(`return !!document.querySelector(".tbl-blk table.fixed colgroup")`);
+    check("dragging a column border shows its width and rewrites the delimiter dashes", /^列宽 \d+px$/.test(tip) && resized[1] !== before && /-{4,}/.test(resized[1]!) && fixed && aligned(resized), `${tip}; ${before} → ${resized[1]}`);
+    await capture("e2e-table-synced");
+
+    await page(`
+      const b = document.querySelector('[data-blk="code"]');
+      b.scrollIntoView({ block: "center" });
+      const lines = b.querySelectorAll(".cl");
+      const r = document.createRange();
+      r.setStartBefore(lines[0]);
+      r.setEndAfter(lines[1]);
+      getSelection().removeAllRanges();
+      getSelection().addRange(r);
+    `);
+    await menu("文件", "将选区生成分享卡片…");
+    await waitFor("the share card dialog", () => page<boolean>(`return !!document.querySelector(".share-card")`));
+    await settle();
+    const kind = await page<string>(`return document.querySelector(".share-card").getAttribute("aria-label")`);
+    check("a code selection opens the share card dialog on a code card", kind === "代码分享卡片预览", kind);
+    await capture("e2e-share-dialog");
+
+    await page(`await mygo.call("ClipboardProbe.Clear")`);
+    await page(`document.querySelector(".share-copy").click()`);
+    await waitFor("已复制", () => page<boolean>(`return document.querySelector(".share-copy").textContent.includes("已复制")`));
+    const png = await page<{ signature: string; width: number; height: number }>(`return await mygo.call("ClipboardProbe.PNG")`);
+    const canvas = await page<{ width: number; height: number; css: number }>(`const c = document.querySelector(".share-card"); return { width: c.width, height: c.height, css: parseFloat(c.style.width) }`);
+    check("复制图片 puts the card on the clipboard as a 2× PNG", png.signature === "89504e470d0a1a0a" && png.width === canvas.width && png.height === canvas.height && png.width >= 2 * 404, JSON.stringify({ png, canvas }));
+
+    await page(`
+      const input = document.querySelector("#share-wm");
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "@e2e");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      document.querySelector('.share-sw[aria-label="墨绿渐变"]').click();
+    `);
+    await Bun.sleep(900);
+    await page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await settle();
+    await menu("文件", "将选区生成分享卡片…");
+    await waitFor("the share card dialog", () => page<boolean>(`return !!document.querySelector(".share-card")`));
+    await settle();
+    const reopened = await page<{ value: string; green: string | null }>(`return { value: document.querySelector("#share-wm").value, green: document.querySelector('.share-sw[aria-label="墨绿渐变"]').getAttribute("aria-pressed") }`);
+    const stored = await page<{ watermark: string; cardBg: string }>(`return await mygo.call("Prefs.Get")`);
+    check("the watermark and background persist in the preferences", reopened.value === "@e2e" && reopened.green === "true" && stored.watermark === "@e2e" && stored.cardBg === "green", JSON.stringify({ reopened, stored: { watermark: stored.watermark, cardBg: stored.cardBg } }));
+    await capture("e2e-share-watermark");
+    await page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await menu("文件", "保存");
+    await waitFor("the save", async () => (await text(".gtitle")).includes("已保存"));
+  });
+
+  const exportPdf = async (menu: Session["menu"], pdf: string) => {
+    await rm(pdf, { force: true });
+    await menu("文件", "导出为 PDF…");
+    await waitFor("the PDF", async () => existsSync(pdf) && (await Bun.file(pdf).size) > 0, 40000);
+    await Bun.sleep(500);
+  };
+  // pdftotext spells some CJK characters as Kangxi radicals, which NFKC folds back; spaces vary, so they go.
+  const pdfPages = async (pdf: string) => {
+    const count = Number((await $`pdfinfo ${pdf}`.text()).match(/Pages:\s+(\d+)/)![1]);
+    const pages: string[][] = [];
+    for (let p = 1; p <= count; p++) pages.push((await $`pdftotext -f ${p} -l ${p} ${pdf} -`.text()).normalize("NFKC").split("\n").map((l) => l.replace(/\s+/g, "")));
+    return pages;
+  };
+
+  // 分页保护 › 图片: off, a tall image is sliced across two pages; on, it moves whole to the next page.
+  const imageDoc = join(work, "图片分页.md");
+  await $`magick -size 600x820 gradient:#5B8DEF-#F2A385 ${join(work, "tall.png")}`;
+  const filler = Array.from({ length: 6 }, (_, i) => `第 ${i + 1} 段填充文字，把图片推到第一页的下半部分，看它放不下时整体移到下一页还是从中间切开。`.repeat(2));
+  await writeFile(imageDoc, ["# 图片分页", ...filler, "![高图](tall.png)", "图片之后的一段。", ""].join("\n\n"));
+  await session(imageDoc, async ({ page, capture, menu }) => {
+    const pdf = join(work, "图片分页.pdf");
+    const imagePages = async () => (await $`pdfimages -list ${pdf}`.text()).split("\n").slice(2).filter(Boolean).map((l) => Number(l.trim().split(/\s+/)[0]));
+    await exportPdf(menu, pdf);
+    const off = await imagePages();
+    await $`pdftoppm -r 40 -png ${pdf} ${join(out, "e2e-guard-image-off")}`;
+    await page(`document.querySelector('[aria-label="导出与分享"]').click()`);
+    await settle();
+    await page(`[...document.querySelectorAll(".pg-chk")].find((b) => b.textContent === "图片").click()`);
+    await settle();
+    const popover = await page<{ open: boolean; summary: string }>(`return { open: !!document.querySelector(".pop-exp"), summary: document.querySelector(".pop-exp .mi small")?.textContent ?? "" }`);
+    await capture("e2e-guard-popover");
+    await page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await Bun.sleep(600);
+    await exportPdf(menu, pdf);
+    const on = await imagePages();
+    await $`pdftoppm -r 40 -png ${pdf} ${join(out, "e2e-guard-image-on")}`;
+    const stored = await page<{ pageGuard: { image: boolean } }>(`return await mygo.call("Prefs.Get")`);
+    check(
+      "with 图片 unchecked a tall image splits across pages; checked, it moves whole to the next page",
+      off.length === 2 && off[0] !== off[1] && on.length === 1 && popover.open && popover.summary === "代码块、表格、图表、图片分页保护" && stored.pageGuard.image,
+      JSON.stringify({ off, on, popover }),
+    );
+  });
+
+  // The defaults guard code, tables and charts: each that fits a page prints on one, and a heading stays with its chart.
+  const guarded = join(work, "超级代码块-分页.md");
+  await copyFile(join(root, "samples/超级代码块.md"), guarded);
+  await session(guarded, async ({ menu }) => {
+    const pdf = join(work, "超级代码块-分页.pdf");
+    await exportPdf(menu, pdf);
+    const pages = await pdfPages(pdf);
+    const pageOf = (mark: string) => pages.findIndex((lines) => lines.some((l) => (mark.startsWith("=") ? l === mark.slice(1) : l.includes(mark)))) + 1;
+    const units: Record<string, string[]> = {
+      diff: ["@@-12,7", "offScroll"],
+      "图表代码块 and its chart": ["=图表代码块", "打开.md文件", "继续阅读"],
+      "Vega-Lite": ["=Vega-Lite", "占比(%)"],
+      table: ["触发方式", "选中后右键"],
+      "wide table": ["回到实时编辑", "灯箱搜索框里按"],
+    };
+    const at = Object.entries(units).map(([name, marks]) => ({ name, pages: marks.map(pageOf) }));
+    const whole = at.every((u) => u.pages[0]! > 0 && u.pages.every((p) => p === u.pages[0]));
+    check("code blocks, tables and charts that fit a page are not cut, and 图表代码块 shares its chart's page", whole, at.map((u) => `${u.name} p${[...new Set(u.pages)].join("/")}`).join(", "));
+    await $`pdftoppm -r 50 -png ${pdf} ${join(out, "e2e-guard-super")}`;
+  });
+}
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed; captures in ${out}`);

@@ -3,7 +3,7 @@ import { renderDiagrams } from "../diagram/engines";
 import type { ParsedDocument } from "../markdown/parse";
 import type { Prefs } from "../platform";
 import articleCss from "../styles/article.css?raw";
-import { exportCss, renderArticle, standaloneDocument } from "./standalone";
+import { exportCss, pdfCss, pdfScript, renderArticle, standaloneDocument } from "./standalone";
 
 const katexFonts = import.meta.glob("/node_modules/katex/dist/fonts/*.woff2", {
   eager: true,
@@ -36,10 +36,13 @@ function inlinedKatexStyles(): Promise<string> {
   return katexStyles;
 }
 
-/** The standalone HTML that both the HTML and the PDF export write. */
-export async function buildStandalone(doc: ParsedDocument, prefs: Prefs, title: string, bg: Prefs["bg"]): Promise<string> {
+/**
+ * The standalone HTML that the HTML export saves and the PDF export prints;
+ * the PDF's also keeps what 分页保护 guards whole on a page.
+ */
+export async function buildStandalone(doc: ParsedDocument, prefs: Prefs, title: string, bg: Prefs["bg"], { pdf = false } = {}): Promise<string> {
   await renderDiagrams(doc.blocks, bg);
-  const body = renderArticle(doc, prefs, bg, { forPrint: true });
-  const css = [body.includes('class="katex') ? await inlinedKatexStyles() : "", articleCss, exportCss].join("\n");
-  return standaloneDocument({ title, body, css, bg });
+  const body = renderArticle(doc, prefs, bg, { guard: prefs.pageGuard });
+  const css = [body.includes('class="katex') ? await inlinedKatexStyles() : "", articleCss, exportCss, pdf ? pdfCss : ""].join("\n");
+  return standaloneDocument({ title, body, css, bg, script: pdf ? pdfScript : undefined });
 }

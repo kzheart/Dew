@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/egoist/mygo"
@@ -128,4 +129,16 @@ func (v *viewService) Sync(ctx context.Context, s ViewState) {
 	}
 	menuBar.ItemByID("focus").SetChecked(s.Focus)
 	menuBar.ItemByID("inline").SetChecked(s.Inline)
+}
+
+// shareCardOnContextMenu puts 生成分享卡片 first in the page's context menu
+// over a selection, above the webview's own items.
+func shareCardOnContextMenu(win *mygo.Window) {
+	win.Page().OnContextMenu(func(e *mygo.ContextMenuEvent) {
+		if strings.TrimSpace(e.SelectionText) == "" {
+			return
+		}
+		e.Menu.Insert(0, &mygo.MenuItem{Label: "生成分享卡片", Click: func(*mygo.MenuItem, *mygo.Window) { Commands.Emit(win, CommandShareCard) }})
+		e.Menu.Insert(1, mygo.Separator())
+	})
 }

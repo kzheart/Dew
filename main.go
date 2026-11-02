@@ -39,7 +39,7 @@ func main() {
 }
 
 func newDocumentWindow(doc *mygo.Document[string]) *mygo.Window {
-	return mygo.NewWindow(mygo.WindowOptions{
+	win := mygo.NewWindow(mygo.WindowOptions{
 		URL:                  "/",
 		Width:                1280,
 		Height:               820,
@@ -50,4 +50,6 @@ func newDocumentWindow(doc *mygo.Document[string]) *mygo.Window {
 		BackgroundColor:      "#FFFFFF",
 		StateKey:             "document",
 	})
+	shareCardOnContextMenu(win)
+	return win
 }

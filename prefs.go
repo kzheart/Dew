@@ -46,18 +46,40 @@ const (
 	SourceSplit SourceLayout = "split"
 )
 
+// CardBackground is what a share card's window sits on.
+type CardBackground string
+
+const (
+	CardBlue   CardBackground = "blue"
+	CardOrange CardBackground = "orange"
+	CardGreen  CardBackground = "green"
+	CardGray   CardBackground = "gray"
+)
+
+// PageGuard names the blocks a PDF moves whole to the next page when they
+// don't fit; the others may split across pages.
+type PageGuard struct {
+	Code  bool `json:"code"`
+	Table bool `json:"table"`
+	Chart bool `json:"chart"`
+	Image bool `json:"image"`
+}
+
 // Prefs are the reading and view preferences new windows start with.
 type Prefs struct {
-	Width           int          `json:"mw"`
-	FontSize        int          `json:"fs"`
-	LineHeight      float64      `json:"lh"`
-	ParagraphGap    float64      `json:"pg"`
-	Font            Font         `json:"ff"`
-	Background      Background   `json:"bg"`
-	Base            BaseMode     `json:"base"`
-	Source          SourceLayout `json:"source"`
-	Inline          bool         `json:"inline"`
-	ShowLineNumbers bool         `json:"showLn"`
+	Width           int            `json:"mw"`
+	FontSize        int            `json:"fs"`
+	LineHeight      float64        `json:"lh"`
+	ParagraphGap    float64        `json:"pg"`
+	Font            Font           `json:"ff"`
+	Background      Background     `json:"bg"`
+	Base            BaseMode       `json:"base"`
+	Source          SourceLayout   `json:"source"`
+	Inline          bool           `json:"inline"`
+	ShowLineNumbers bool           `json:"showLn"`
+	CardBackground  CardBackground `json:"cardBg"`
+	Watermark       string         `json:"watermark"`
+	PageGuard       PageGuard      `json:"pageGuard"`
 }
 
 func defaultPrefs() Prefs {
@@ -65,8 +87,13 @@ func defaultPrefs() Prefs {
 		Width: 720, FontSize: 16, LineHeight: 1.75, ParagraphGap: 1,
 		Font: FontSans, Background: BackgroundWhite,
 		Base: BaseLive, Source: SourceOff, ShowLineNumbers: true,
+		CardBackground: CardBlue,
+		PageGuard:      PageGuard{Code: true, Table: true, Chart: true},
 	}
 }
+
+// maxWatermark is the most characters a share card's watermark keeps.
+const maxWatermark = 40
 
 // normalized clamps the values a hand-edited or older file may hold to
 // the ranges the page offers.
@@ -87,6 +114,12 @@ func (p Prefs) normalized() Prefs {
 	}
 	if p.Source != SourceOff && p.Source != SourceFull && p.Source != SourceSplit {
 		p.Source = d.Source
+	}
+	if p.CardBackground != CardBlue && p.CardBackground != CardOrange && p.CardBackground != CardGreen && p.CardBackground != CardGray {
+		p.CardBackground = d.CardBackground
+	}
+	if r := []rune(p.Watermark); len(r) > maxWatermark {
+		p.Watermark = string(r[:maxWatermark])
 	}
 	return p
 }

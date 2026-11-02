@@ -2,9 +2,9 @@ import { isMyGo, onDocumentReload, onDocumentState } from "mygo-runtime";
 import { docFileURL } from "./app/docFile";
 import { defaultPrefs } from "./defaultPrefs";
 import * as go from "./mygo";
-import type { Command, DocumentState, Prefs, ViewState } from "./mygo";
+import type { CardBackground, Command, DocumentState, PageGuard, Prefs, ViewState } from "./mygo";
 
-export type { Command, DocumentState, Prefs };
+export type { CardBackground, Command, DocumentState, PageGuard, Prefs };
 
 /** What the page needs from its host: the app's Go services, or stand-ins in a browser tab. */
 export interface Host {
@@ -24,7 +24,8 @@ export interface Host {
     pdf(html: string, name: string): Promise<string>;
     html(html: string, name: string): Promise<string>;
     richText(html: string, text: string): Promise<void>;
-    shareCard(pngBase64: string, name: string): Promise<string>;
+    copyImage(pngBase64: string): Promise<void>;
+    saveImage(pngBase64: string, name: string): Promise<string>;
     svg(svg: string, name: string): Promise<string>;
   };
   assets: {
@@ -98,7 +99,8 @@ async function browserHost(): Promise<Host> {
       pdf: async () => "",
       html: async () => "",
       richText: async () => {},
-      shareCard: async () => "",
+      copyImage: async () => {},
+      saveImage: async () => "",
       svg: async () => "",
     },
     // Pasted images stay in memory, under the path the app would have saved them at.

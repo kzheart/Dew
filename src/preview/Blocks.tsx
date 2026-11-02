@@ -1,6 +1,7 @@
 import { memo, useContext, useState, type ReactNode } from "react";
 import type { Align, Block } from "../markdown/parse";
 import { BlockActionsContext, type TableBlock } from "./actions";
+import { TableAssist } from "../live/TableAssist";
 import { Code, ZoomButton } from "./Code";
 import { Calendar, calloutIcons, Chevron, Person } from "./icons";
 
@@ -169,14 +170,22 @@ export const cellHtml = (h: string) => (SHORTCUT.test(h) ? `<kbd>${h}</kbd>` : h
 export const alignClass = (a: Align) => (a === "center" ? "c" : a === "right" ? "r" : undefined);
 
 function Table({ block }: { block: TableBlock }) {
-  const { interactive } = useContext(BlockActionsContext);
+  const { interactive, onEditTable } = useContext(BlockActionsContext);
+  const [draft, setDraft] = useState<number[] | null>(null);
+  const widths = draft?.map((px) => `${px}px`) ?? block.widths?.map((w) => `${(w * 100).toFixed(2)}%`);
   const cls = (i: number) => alignClass(block.align[i] ?? null);
   const cell = (h: string) => html(cellHtml(h));
   return (
     <div {...attrs(block, "tbl-blk")}>
       {interactive && <ZoomButton target={{ kind: "table", block }} className="tbl-zoom" />}
+      {onEditTable && <TableAssist block={block} draft={draft} onDraft={setDraft} onEdit={(change) => onEditTable(block, change)} />}
       <div className="tbl-wrap">
-        <table className="tbl">
+        <table className={widths ? "tbl fixed" : "tbl"}>
+          {widths && (
+            <colgroup>
+              {widths.map((w, i) => <col key={i} style={{ width: w }} />)}
+            </colgroup>
+          )}
           <thead>
             <tr>{block.header.map((h, i) => <th key={i} className={cls(i)} dangerouslySetInnerHTML={cell(h)} />)}</tr>
           </thead>

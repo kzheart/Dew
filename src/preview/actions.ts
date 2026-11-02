@@ -21,6 +21,8 @@ export interface BlockActions {
   onToggleTask(line: number): void;
   onZoom(target: LightboxTarget): void;
   onExportSvg(svg: string, engine: DiagramEngine): void;
+  /** Live mode only: rewrites a table's source, returning the new source. */
+  onEditTable?(block: TableBlock, change: (src: string) => string): string;
 }
 
 export const BlockActionsContext = createContext<BlockActions>({

@@ -10,6 +10,9 @@ export type Background = "white" | "paper" | "night";
 /** BaseMode is the rendered view the segmented control picks. */
 export type BaseMode = "live" | "preview";
 
+/** CardBackground is what a share card's window sits on. */
+export type CardBackground = "blue" | "orange" | "green" | "gray";
+
 /** Command is a menu command that the focused window's page carries out. */
 export type Command = "save" | "live" | "preview" | "source" | "split" | "focus" | "inline" | "exportPDF" | "exportHTML" | "copyRichText" | "shareCard";
 
@@ -50,6 +53,17 @@ export type Font = "serif" | "sans" | "mono";
 /** Mode is the view a window shows. */
 export type Mode = "live" | "preview" | "edit" | "split";
 
+/**
+ * PageGuard names the blocks a PDF moves whole to the next page when they
+ * don't fit; the others may split across pages.
+ */
+export interface PageGuard {
+  code: boolean;
+  table: boolean;
+  chart: boolean;
+  image: boolean;
+}
+
 /** Prefs are the reading and view preferences new windows start with. */
 export interface Prefs {
   mw: number;
@@ -62,6 +76,9 @@ export interface Prefs {
   source: SourceLayout;
   inline: boolean;
   showLn: boolean;
+  cardBg: CardBackground;
+  watermark: string;
+  pageGuard: PageGuard;
 }
 
 /** SourceLayout is how the Markdown source shows, if at all. */
@@ -171,6 +188,10 @@ export const Prefs = {
  * files and to the clipboard.
  */
 export const Export = {
+  /** CopyImage puts a PNG image on the clipboard. */
+  copyImage(png: string): Promise<void> {
+    return call("Export.CopyImage", png);
+  },
   /** HTML saves a standalone HTML document where the user chooses. */
   html(html: string, name: string): Promise<string> {
     return call("Export.HTML", html, name);
@@ -193,12 +214,9 @@ export const Export = {
   svg(svg: string, name: string): Promise<string> {
     return call("Export.SVG", svg, name);
   },
-  /**
-   * ShareCard copies a PNG image to the clipboard and saves it where the
-   * user chooses.
-   */
-  shareCard(png: string, name: string): Promise<string> {
-    return call("Export.ShareCard", png, name);
+  /** SaveImage saves a PNG image where the user chooses. */
+  saveImage(png: string, name: string): Promise<string> {
+    return call("Export.SaveImage", png, name);
   },
 } as const;
 

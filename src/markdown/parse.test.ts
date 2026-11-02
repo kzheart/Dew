@@ -85,6 +85,13 @@ describe("the prototype's document", () => {
     expect(b.align).toEqual(["left", "left", "center"]);
     expect(b.header).toEqual(["模式", "适合场景", "快捷键"]);
     expect(b.rows.map((r) => r[0])).toEqual(["实时", "预览", "源码", "源码 · 分栏"]);
+    expect(b.widths).toBeNull();
+  });
+
+  test("a table's delimiter runs are its column widths", () => {
+    const b = parseDocument("---\ntitle: t\n---\n\n| a | b |\n| ------ | -- |\n| 1 | 2 |").blocks[1]!;
+    if (b.kind !== "table") throw new Error(b.kind);
+    expect(b.widths).toEqual([0.75, 0.25]);
   });
 
   test("inline and block math", () => {

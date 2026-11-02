@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { DocumentState, Prefs } from "../platform";
+import type { DocumentState, PageGuard, Prefs } from "../platform";
 import type { Base, Layout, ViewState } from "../state/view";
 import { usePresence } from "./hooks";
 import { titleStatus } from "./labels";
@@ -135,7 +135,12 @@ export function Header(p: Props) {
             </button>
           </div>
           <AaPopover open={p.popover === "aa"} prefs={p.prefs} onPrefs={p.onPrefs} />
-          <ExportPopover open={p.popover === "export"} onExport={(a) => { p.onPopover(null); p.onExport(a); }} />
+          <ExportPopover
+            open={p.popover === "export"}
+            guard={p.prefs.pageGuard}
+            onGuard={(pageGuard) => p.onPrefs({ pageGuard })}
+            onExport={(a) => { p.onPopover(null); p.onExport(a); }}
+          />
         </div>
       </div>
     </header>
@@ -192,15 +197,41 @@ function AaPopover({ open, prefs, onPrefs }: { open: boolean; prefs: Prefs; onPr
   );
 }
 
-function ExportPopover({ open, onExport }: { open: boolean; onExport(a: ExportAction): void }) {
+const guards: { id: keyof PageGuard; label: string }[] = [
+  { id: "code", label: "代码块" },
+  { id: "table", label: "表格" },
+  { id: "chart", label: "图表" },
+  { id: "image", label: "图片" },
+];
+
+/** What the PDF keeps whole on a page, in words. */
+export function guardSummary(guard: PageGuard): string {
+  const on = guards.filter((g) => guard[g.id]).map((g) => g.label);
+  return on.length ? `${on.join("、")}分页保护` : "不做分页保护";
+}
+
+function ExportPopover({ open, guard, onGuard, onExport }: { open: boolean; guard: PageGuard; onGuard(g: PageGuard): void; onExport(a: ExportAction): void }) {
   const { mounted, leaving } = usePresence(open, 190);
   if (!mounted) return null;
   return (
     <div className={leaving ? "pop pop-exp out" : "pop pop-exp"} role="menu" aria-label="导出与分享">
       <button className="mi" role="menuitem" onClick={() => onExport("pdf")}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg>
-        <span>导出为 PDF…<small>代码块、表格、图表分页保护</small></span><span className="sc">⌘P</span>
+        <span>导出为 PDF…<small>{guardSummary(guard)}</small></span><span className="sc">⌘P</span>
       </button>
+      <div className="pg-guard" role="group" aria-label="分页保护">
+        <span className="pg-guard-l" aria-hidden="true">分页保护<small>放不下时整体移到下一页</small></span>
+        <div className="pg-chks">
+          {guards.map((g) => (
+            <button key={g.id} className="pg-chk" role="menuitemcheckbox" aria-checked={guard[g.id]} onClick={() => onGuard({ ...guard, [g.id]: !guard[g.id] })}>
+              <span className="pg-box" aria-hidden="true">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg>
+              </span>
+              {g.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <button className="mi" role="menuitem" onClick={() => onExport("html")}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 8l-4 4 4 4M16 8l4 4-4 4" /></svg>
         <span>导出为 HTML…</span>

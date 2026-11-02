@@ -1,9 +1,9 @@
 import type { Extension } from "@codemirror/state";
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from "react";
 import { blockLabel } from "../app/labels";
 import { blockAtLine, type Block, type ParsedDocument } from "../markdown/parse";
 import { deleteLines, replaceLines, sliceLines } from "../markdown/source";
-import { addColumn, addRow, alignments, columnAt, setAlign } from "../markdown/table";
+import { alignments, columnAt, insertColumn, insertRow, setAlign } from "../markdown/table";
 import type { Cursor } from "../editor/SourceEditor";
 import type { LiveEditing } from "../preview/Article";
 import type { LineRange } from "../preview/layout";
@@ -76,7 +76,23 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
     set(b ? { ...a, start: b.start, end: b.end } : null);
   }, [revision]);
 
-  if (!enabled) return { live: null, label: null };
+  // An edit above the active block moves its lines.
+  const editTable = useCallback(
+    (block: Block, change: (src: string) => string) => {
+      let next = "";
+      edit((t) => {
+        next = change(sliceLines(t, block.start, block.end));
+        return replaceLines(t, block.start, block.end, next);
+      });
+      const a = current.current;
+      const delta = next.split("\n").length - (block.end - block.start + 1);
+      if (a && delta && a.start > block.end) set({ ...a, start: a.start + delta, end: a.end + delta });
+      return next;
+    },
+    [edit],
+  );
+
+  if (!enabled) return { live: null, label: null, editTable };
 
   const onActivate = (block: Block | null, e: MouseEvent) => {
     const target = e.target as Element;
@@ -110,7 +126,7 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
     if (b) activate(b, dir < 0 ? "end" : "start");
   };
 
-  if (!active) return { live: { range: null, editor: null, onActivate, onKeyDown }, label: null };
+  if (!active) return { live: { range: null, editor: null, onActivate, onKeyDown }, label: null, editTable };
 
   const block = blockWithin(doc.blocks, active);
   const source = sliceLines(text, active.start, active.end);
@@ -120,8 +136,8 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
     <TableTools
       align={alignments(source)[col] ?? null}
       onAlign={(a) => replace(setAlign(source, col, a))}
-      onAddRow={() => replace(addRow(source, cursor.line).src)}
-      onAddColumn={() => replace(addColumn(source, col).src)}
+      onAddRow={() => replace(insertRow(source, Math.max(0, cursor.line - 1)))}
+      onAddColumn={() => replace(insertColumn(source, col + 1))}
       onDelete={() => {
         set(null);
         edit((t) => deleteLines(t, active.start, active.end));
@@ -138,6 +154,7 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
         key={`${active.key}-${showLineNumbers}`}
         block={block}
         source={source}
+        firstLine={active.start}
         caret={active.caret}
         showLineNumbers={showLineNumbers}
         assist={assist}
@@ -151,5 +168,5 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
       />
     ),
   };
-  return { live, label: block ? blockLabel(block) : "段落" };
+  return { live, label: block ? blockLabel(block) : "段落", editTable };
 }

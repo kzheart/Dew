@@ -14,6 +14,8 @@ interface Props {
   /** What the active lines currently parse as; null while they are blank. */
   block: Block | null;
   source: string;
+  /** The document line source starts on, which a share card reads a selection's lines by. */
+  firstLine: number;
   caret: Caret;
   showLineNumbers: boolean;
   /** Typing aids shared with the source editor; they take keys before the block's own. */
@@ -95,7 +97,7 @@ function textShell(block: Block | null): { tag: string; className: string } {
 }
 
 /** The active block of live mode: its source in a small CodeMirror, in place of the rendered block. */
-export function LiveEditor({ block, source, caret, showLineNumbers, assist = [], tools, onChange, onExit, onCursor }: Props) {
+export function LiveEditor({ block, source, firstLine, caret, showLineNumbers, assist = [], tools, onChange, onExit, onCursor }: Props) {
   const host = useRef<HTMLElement | null>(null);
   const view = useRef<EditorView | null>(null);
   const callbacks = useRef({ onChange, onExit, onCursor });
@@ -176,7 +178,7 @@ export function LiveEditor({ block, source, caret, showLineNumbers, assist = [],
   if (shell === "code" && block?.kind === "code") {
     const meta = codeMeta(block.highlight);
     return (
-      <div className="blk act cb">
+      <div className="blk act cb" data-line={firstLine}>
         <div className="cb-head">
           <span className="cb-lang">{codeLabel(block)}</span>
           {meta && <span className="cb-meta">{meta}</span>}
@@ -187,7 +189,7 @@ export function LiveEditor({ block, source, caret, showLineNumbers, assist = [],
   }
   if (shell === "source") {
     return (
-      <div className="blk act lv-source">
+      <div className="blk act lv-source" data-line={firstLine}>
         {tools}
         <div className="src-box lv" ref={attach} />
       </div>
@@ -195,5 +197,5 @@ export function LiveEditor({ block, source, caret, showLineNumbers, assist = [],
   }
   const { tag: Tag, className } = textShell(block);
   const El = Tag as "div";
-  return <El className={`blk act lv${className ? " " + className : ""}`} ref={attach} />;
+  return <El className={`blk act lv${className ? " " + className : ""}`} data-line={firstLine} ref={attach} />;
 }

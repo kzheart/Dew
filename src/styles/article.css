@@ -206,6 +206,8 @@ pre.cb-body,pre.lb-code{display:grid;grid-template-columns:minmax(100%,max-conte
 .tbl th{font-weight:600;font-size:.88em;color:#4B4B50}
 .tbl .c{text-align:center}
 .tbl .r{text-align:right}
+.tbl.fixed{table-layout:fixed}
+.tbl.fixed th,.tbl.fixed td{overflow-wrap:anywhere}
 .tbl kbd{font-size:11px;padding:1px 7px;border:.5px solid rgba(0,0,0,.2);border-radius:5px;background:#FAFAFA;color:#3A3A3E}
 .bg-paper .tbl th,.bg-paper .tbl td{border-color:#DFD1B5}
 .bg-paper .tbl th{color:#5A4B36}

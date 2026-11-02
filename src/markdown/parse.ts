@@ -1,6 +1,7 @@
 import MarkdownIt from "markdown-it";
 import type { Token } from "markdown-it";
 import { parse as parseYaml } from "yaml";
+import { relativeWidths } from "./table";
 import { footnotePlugin, mathPlugin, presentationPlugin, taskPlugin, tokenLabel, tokenTask, type RenderEnv } from "./plugins";
 
 /** 1-based, inclusive source lines. */
@@ -37,7 +38,7 @@ export type Block = Span &
     | { kind: "list"; ordered: boolean; startNumber: number; tasksOnly: boolean; items: ListItem[]; tasks: TaskCount }
     | { kind: "quote"; html: string }
     | { kind: "code"; lang: string; info: string; title: string; view: CodeView; code: string; highlight: number[] }
-    | { kind: "table"; align: Align[]; header: string[]; rows: string[][] }
+    | { kind: "table"; align: Align[]; header: string[]; rows: string[][]; widths: number[] | null }
     | { kind: "math"; tex: string; html: string }
     | { kind: "footnotes"; items: FootnoteItem[] }
     | { kind: "hr" }
@@ -180,7 +181,7 @@ export function parseDocument(text: string, options: ParseOptions = {}): ParsedD
         break;
       }
       case "table_open":
-        blocks.push(table(tokens.slice(i, close + 1), span, env));
+        blocks.push(table(tokens.slice(i, close + 1), span, lines[span.start] ?? "", env));
         break;
       case "math_block":
         blocks.push({ kind: "math", ...span, tex: t.content, html: md.renderer.render([t], md.options, env) });
@@ -328,7 +329,8 @@ function list(tokens: Token[], open: number, close: number, lines: string[], spa
   };
 }
 
-function table(tokens: Token[], span: Span, env: RenderEnv): Block {
+/** delimiterRow, the table's second line, gives its column widths. */
+function table(tokens: Token[], span: Span, delimiterRow: string, env: RenderEnv): Block {
   const align: Align[] = [];
   const header: string[] = [];
   const rows: string[][] = [];
@@ -351,7 +353,7 @@ function table(tokens: Token[], span: Span, env: RenderEnv): Block {
       } else row?.push(html);
     }
   }
-  return { kind: "table", ...span, align, header, rows };
+  return { kind: "table", ...span, align, header, rows, widths: relativeWidths(delimiterRow) };
 }
 
 const PLAIN: CodeView = { kind: "plain" };

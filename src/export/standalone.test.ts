@@ -1,9 +1,9 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { defaultPrefs } from "../defaultPrefs";
 import { engines, renderDiagrams } from "../diagram/engines";
 import { parseDocument } from "../markdown/parse";
-import { baseName, documentTitle, renderArticle, standaloneDocument } from "./standalone";
+import { baseName, documentTitle, keepHeadingsWithNext, pageUnits, pdfScript, renderArticle, standaloneDocument } from "./standalone";
 
 const sample = parseDocument(readFileSync(new URL("../../samples/版本说明.md", import.meta.url), "utf8"));
 
@@ -19,10 +19,38 @@ test("the exported article has every block and no controls", () => {
 });
 
 test("a printed export keeps each heading on the page of the block after it", () => {
-  const html = renderArticle(sample, defaultPrefs, "white", { forPrint: true });
-  expect(html).toMatch(/<div class="keep"><h2[^>]*>模式对比<\/h2><div[^>]*><div class="tbl-wrap">/);
-  expect(html.match(/class="keep"/g)).toHaveLength(4);
-  expect(renderArticle(sample, defaultPrefs, "white")).not.toContain('class="keep"');
+  const html = renderArticle(sample, defaultPrefs, "white", { guard: defaultPrefs.pageGuard });
+  expect(html).toMatch(/<div class="pg" data-protect=""><h2[^>]*>模式对比<\/h2><div[^>]*><div class="tbl-wrap">/);
+  expect(renderArticle(sample, defaultPrefs, "white")).not.toContain('class="pg"');
+});
+
+test("a run of headings stays with the block after them", () => {
+  const groups = keepHeadingsWithNext(parseDocument("# 一\n\n## 二\n\n正文\n\n另一段").blocks);
+  expect(groups.map((g) => g.map((b) => b.kind))).toEqual([["heading", "heading", "paragraph"], ["paragraph"]]);
+});
+
+describe("page protection", () => {
+  const doc = parseDocument(
+    ["段落", "", "```ts", "a()", "```", "", "```mermaid", "graph TD", "```", "", "| a |", "| - |", "| 1 |", "", "![图](a.png)", "", "$$", "x", "$$", "", "## 标题", "", "![图](b.png)"].join("\n"),
+  );
+  const protectedKinds = (guard: typeof defaultPrefs.pageGuard) =>
+    pageUnits(doc.blocks, guard).map((u) => `${u.blocks.map((b) => (b.kind === "code" && b.view.kind === "diagram" ? "chart" : b.kind)).join("+")}${u.protect ? "!" : ""}`);
+
+  test("guards code, tables and charts by default, and always math and a heading with its block", () => {
+    expect(protectedKinds(defaultPrefs.pageGuard)).toEqual(["paragraph", "code!", "chart!", "table!", "image", "math!", "heading+image!"]);
+  });
+
+  test("follows each setting", () => {
+    expect(protectedKinds({ code: false, table: false, chart: false, image: true })).toEqual(["paragraph", "code", "chart", "table", "image!", "math!", "heading+image!"]);
+  });
+});
+
+test("the PDF's page is ready only once its script has measured it; the HTML file's from the start", () => {
+  const pdf = standaloneDocument({ title: "t", body: "<p>x</p>", css: "", bg: "white", script: pdfScript });
+  expect(pdf).toContain('<body class="pv bg-white">');
+  expect(pdf).toContain(`<script>${pdfScript}</script>`);
+  expect(pdfScript).toContain('setAttribute("data-dew-export"');
+  expect(standaloneDocument({ title: "t", body: "", css: "", bg: "white" })).not.toContain("<script>");
 });
 
 test("an export draws its charts, keeps a failed one's source, colors diffs and shows long code whole", async () => {

@@ -65,12 +65,13 @@ func (exportService) RichText(html, text string) error {
 	)))
 }
 
-// ShareCard copies a PNG image to the clipboard and saves it where the
-// user chooses.
-func (exportService) ShareCard(ctx context.Context, png []byte, name string) (string, error) {
-	if err := mygo.Clipboard.Write(transfer.New(transfer.NewItem(transfer.Bytes(transfer.PNG, png)))); err != nil {
-		return "", err
-	}
+// CopyImage puts a PNG image on the clipboard.
+func (exportService) CopyImage(png []byte) error {
+	return mygo.Clipboard.Write(transfer.New(transfer.NewItem(transfer.Bytes(transfer.PNG, png))))
+}
+
+// SaveImage saves a PNG image where the user chooses.
+func (exportService) SaveImage(ctx context.Context, png []byte, name string) (string, error) {
 	path, err := askSavePath(ctx, name+".png", mygo.FileFilter{Name: "PNG", Extensions: []string{"png"}})
 	if err != nil || path == "" {
 		return "", err
