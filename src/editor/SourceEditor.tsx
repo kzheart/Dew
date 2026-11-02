@@ -8,7 +8,7 @@ import {
   keymap,
   lineNumbers,
 } from "@codemirror/view";
-import { useEffect, useRef, type Ref } from "react";
+import { useEffect, useLayoutEffect, useRef, type Ref } from "react";
 import { diff } from "../markdown/source";
 import { inlineRender, renderExtensions } from "./render";
 import { markdownSyntax } from "./syntax";
@@ -95,7 +95,9 @@ export function SourceEditor({ text, inline, focus, wide, initialCursor, assist 
     // The view is created once; later props are applied by the effects below.
   }, []);
 
-  useEffect(() => {
+  // A layout effect, so it runs in the commit that rendered `text`: a passive one can run after the
+  // user's next keystroke, take this older text for an outside change, and undo that keystroke.
+  useLayoutEffect(() => {
     const v = view.current;
     if (!v) return;
     const change = diff(v.state.doc.toString(), text);

@@ -166,7 +166,8 @@ export function LiveEditor({ block, source, caret, showLineNumbers, assist = [],
     // One editor per activation (the parent keys it); later props are applied below.
   }, []);
 
-  useEffect(() => {
+  // In the commit that rendered `source`, not after the next keystroke (see SourceEditor).
+  useLayoutEffect(() => {
     const v = view.current;
     const change = v && diff(v.state.doc.toString(), source);
     if (v && change) v.dispatch({ changes: change, annotations: external.of(true) });
