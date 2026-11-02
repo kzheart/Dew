@@ -46,13 +46,29 @@ type ViewState struct {
 
 func send(c Command) func(*mygo.MenuItem, *mygo.Window) {
 	return func(_ *mygo.MenuItem, win *mygo.Window) {
-		if win == nil {
-			win = mygo.FocusedWindow()
-		}
-		if win != nil {
+		if win = commandTarget(win); win != nil {
 			Commands.Emit(win, c)
 		}
 	}
+}
+
+// commandTarget is the window a menu command acts on: the focused one, or,
+// while the app is not active (a menu chosen by automation, or right after
+// launch), the newest visible window.
+func commandTarget(win *mygo.Window) *mygo.Window {
+	if win != nil {
+		return win
+	}
+	if win = mygo.FocusedWindow(); win != nil {
+		return win
+	}
+	all := mygo.Windows()
+	for i := len(all) - 1; i >= 0; i-- {
+		if all[i].IsVisible() {
+			return all[i]
+		}
+	}
+	return nil
 }
 
 var menuBar *mygo.Menu

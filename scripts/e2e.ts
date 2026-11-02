@@ -12,7 +12,7 @@
 import { $ } from "bun";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Automation } from "./automation";
 
@@ -48,11 +48,13 @@ console.log("building…");
 await $`bun run build:web`.cwd(root).quiet();
 const ldflags = [
   "-X github.com/egoist/mygo.packageFileExtensions=md,markdown",
-  "-X github.com/egoist/mygo.packageName=Dew",
+  "-X github.com/egoist/mygo.packageName=DewE2E",
   "-X github.com/egoist/mygo.packageIdentifier=com.example.dew.e2e",
 ].join(" ");
 await $`go build -tags e2e -ldflags ${ldflags} -o dew-e2e .`.cwd(root);
 
+// Its own settings, reset, so every run starts in the default mode.
+await rm(join(homedir(), "Library/Application Support/DewE2E"), { recursive: true, force: true });
 await rm(socket, { force: true });
 const proc = Bun.spawn([join(root, "dew-e2e"), file], {
   env: { ...process.env, MYGO_AUTOMATION: socket, DEW_E2E_SAVE_DIR: work },
@@ -143,6 +145,34 @@ try {
   await waitFor("the HTML", async () => existsSync(html) && (await Bun.file(html).size) > 0, 10000);
   const saved = await readFile(html, "utf8");
   check("文件 › 导出为 HTML… saves a standalone file", saved.includes("data-dew-export") && saved.includes("data:font/woff2"), `${saved.length} chars`);
+
+  await menu("视图", "预览");
+  await settle();
+  await page(`document.querySelector('[aria-label="放大查看"]').click()`);
+  await settle();
+  await page(`
+    const input = document.querySelector("#lbq");
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "src");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  `);
+  await settle();
+  check("the code lightbox opens and counts search hits", (await text(".lb-search")).includes("3 处匹配"), await text(".lb-search"));
+  await capture("e2e-lightbox");
+  await page(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+  await settle();
+  check("Escape closes the lightbox", !(await page<boolean>(`return !!document.querySelector(".lb")`)));
+
+  // The share card writes its PNG to the clipboard as well as to the file.
+  await page(`
+    const p = document.querySelector('article p[data-src="47"]');
+    getSelection().selectAllChildren(p);
+  `);
+  await menu("文件", "将选区生成分享卡片…");
+  const card = join(work, "版本说明-分享卡片.png");
+  await waitFor("the share card", async () => existsSync(card) && (await Bun.file(card).size) > 0, 10000);
+  const sig = Buffer.from(await Bun.file(card).slice(0, 8).arrayBuffer()).toString("hex");
+  check("文件 › 将选区生成分享卡片… saves a PNG", sig === "89504e470d0a1a0a", `${await Bun.file(card).size} bytes`);
+  await copyFile(card, join(out, "e2e-share-card.png"));
 
   // Another app changes the file while the page has no unsaved edits: the page reloads it.
   await menu("文件", "保存");

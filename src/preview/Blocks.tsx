@@ -225,24 +225,22 @@ function Code({ block }: { block: CodeBlock }) {
   );
 }
 
-export function CodeLines({ lines, highlight, showLineNumbers, hits, before, after }: {
+export function CodeLines({ lines, highlight, showLineNumbers, hits, className = "cb-body", fontSize }: {
   lines: string[];
   highlight: number[];
   showLineNumbers: boolean;
   hits?: Set<number>;
-  before?: ReactNode;
-  after?: ReactNode;
+  className?: string;
+  fontSize?: number;
 }) {
   return (
-    <pre className="cb-body">
-      {before}
+    <pre className={className} style={fontSize ? { fontSize } : undefined}>
       {lines.map((l, i) => (
         <span key={i} className={`cl${highlight.includes(i + 1) ? " cl-hl" : ""}${hits?.has(i) ? " lb-hit" : ""}`}>
           {showLineNumbers && <span className="cb-ln">{i + 1}</span>}
           <span dangerouslySetInnerHTML={html(l)} />
         </span>
       ))}
-      {after}
     </pre>
   );
 }
@@ -296,4 +294,13 @@ function Table({ block }: { block: Extract<Block, { kind: "table" }> }) {
       </div>
     </div>
   );
+}
+
+/** Lines (0-based) of code that contain query, ignoring case; none for a blank query. */
+export function searchHits(code: string, query: string): Set<number> {
+  const q = query.trim().toLowerCase();
+  const hits = new Set<number>();
+  if (!q) return hits;
+  code.split("\n").forEach((line, i) => line.toLowerCase().includes(q) && hits.add(i));
+  return hits;
 }
