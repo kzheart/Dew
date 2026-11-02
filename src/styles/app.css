@@ -459,8 +459,10 @@ header .ig{animation:dropIn .65s cubic-bezier(.3,1.3,.45,1) .22s backwards}
 
 .src-ext{display:flex;align-items:center;gap:4px;overflow:hidden;max-width:340px;animation:extIn .6s cubic-bezier(.3,1.15,.45,1) both}
 .src-ext.out{animation:extOut .28s cubic-bezier(.4,0,.6,1) both;pointer-events:none}
-@keyframes extIn{from{max-width:0;opacity:0;filter:blur(4px)}to{max-width:340px;opacity:1;filter:blur(0)}}
-@keyframes extOut{from{max-width:340px;opacity:1}to{max-width:0;opacity:0;filter:blur(4px)}}
+@keyframes extIn{from{max-width:0;opacity:0}to{max-width:340px;opacity:1}}
+@keyframes extOut{from{max-width:340px;opacity:1}to{max-width:0;opacity:0}}
+.src-ext > *{animation:extItem .6s cubic-bezier(.3,1.15,.45,1) backwards}
+@keyframes extItem{from{transform:translateX(-12px)}}
 .src-btn[aria-pressed="true"] svg{animation:spinIn .55s cubic-bezier(.3,1.4,.45,1)}
 @keyframes spinIn{from{transform:rotate(-90deg) scale(.6)}}
 
