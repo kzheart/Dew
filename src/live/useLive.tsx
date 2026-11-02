@@ -3,6 +3,7 @@ import { blockLabel } from "../app/labels";
 import { blockAtLine, type Block, type ParsedDocument } from "../markdown/parse";
 import { deleteLines, replaceLines, sliceLines } from "../markdown/source";
 import { addColumn, addRow, alignments, columnAt, setAlign } from "../markdown/table";
+import type { Cursor } from "../editor/SourceEditor";
 import type { LiveEditing } from "../preview/Article";
 import type { LineRange } from "../preview/layout";
 import { renderedPrefixAt, sourceOffsetFor } from "./caret";
@@ -18,10 +19,12 @@ interface Options {
   revision: number;
   showLineNumbers: boolean;
   article: RefObject<HTMLElement | null>;
+  /** The caret as a document line and column, for the source editor to pick up. */
+  onCaret(cursor: Cursor): void;
 }
 
 /** Live mode: which block is being edited, and the handlers that move between blocks. */
-export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, article }: Options) {
+export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, article, onCaret }: Options) {
   const [active, setActive] = useState<Active | null>(null);
   const [cursor, setCursor] = useState({ line: 0, ch: 0 });
   // Editor events arrive between renders, so handlers read the latest values from refs.
@@ -138,7 +141,10 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
         tools={tools}
         onChange={replace}
         onExit={onExit}
-        onCursor={(line, ch) => setCursor({ line, ch })}
+        onCursor={(line, ch) => {
+          setCursor({ line, ch });
+          if (current.current) onCaret({ line: current.current.start + line, col: ch + 1 });
+        }}
       />
     ),
   };

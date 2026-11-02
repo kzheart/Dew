@@ -60,6 +60,15 @@ export function App({ initial }: { initial: Initial }) {
   const pvRef = useRef<HTMLDivElement>(null);
   const articleRef = useRef<HTMLElement>(null);
   const sync = useScrollSync(edView, pvRef, isSplit);
+  // Entering split, the pane that was already on screen keeps its place and the new one follows it.
+  const prevMode = useRef(mode);
+  useEffect(() => {
+    const from = prevMode.current;
+    prevMode.current = mode;
+    if (mode !== "split" || from === "split") return;
+    const id = requestAnimationFrame(() => (from === "edit" ? sync.fromEditor() : sync.fromPreview()));
+    return () => cancelAnimationFrame(id);
+  }, [mode]);
   const lastY = useRef<Record<string, number>>({});
   const trackScroll = (el: HTMLElement, key: string) => {
     const y = el.scrollTop;
@@ -129,6 +138,7 @@ export function App({ initial }: { initial: Initial }) {
     revision: doc.revision,
     showLineNumbers: prefs.showLn,
     article: articleRef,
+    onCaret: setCursor,
   });
 
   const runExport = (action: ExportAction) => {
@@ -194,6 +204,7 @@ export function App({ initial }: { initial: Initial }) {
               inline={prefs.inline}
               focus={focus}
               wide={!isSplit}
+              initialCursor={cursor}
               viewRef={edView}
               onChange={edit}
               onCursor={setCursor}

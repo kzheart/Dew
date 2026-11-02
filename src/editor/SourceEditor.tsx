@@ -26,13 +26,15 @@ interface Props {
   inline: boolean;
   focus: boolean;
   wide: boolean;
+  /** Where the caret starts, carried over from the mode the user came from. */
+  initialCursor?: Cursor | null;
   viewRef?: Ref<EditorView | null>;
   onChange(text: string): void;
   onCursor(cursor: Cursor): void;
   onScroll?(): void;
 }
 
-export function SourceEditor({ text, inline, focus, wide, viewRef, onChange, onCursor, onScroll }: Props) {
+export function SourceEditor({ text, inline, focus, wide, initialCursor, viewRef, onChange, onCursor, onScroll }: Props) {
   const parent = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const inlineConf = useRef(new Compartment());
@@ -71,10 +73,17 @@ export function SourceEditor({ text, inline, focus, wide, viewRef, onChange, onC
         ],
       }),
     });
+    if (initialCursor) {
+      const line = v.state.doc.line(Math.min(initialCursor.line, v.state.doc.lines));
+      const pos = Math.min(line.from + initialCursor.col - 1, line.to);
+      // Beside the preview, the scroll position follows the preview instead.
+      v.dispatch({ selection: { anchor: pos }, effects: wide ? EditorView.scrollIntoView(pos, { y: "center" }) : [] });
+    }
     v.scrollDOM.addEventListener("scroll", () => callbacks.current.onScroll?.(), { passive: true });
     view.current = v;
     assignRef(viewRef, v);
     report(v.state);
+    v.focus();
     return () => {
       assignRef(viewRef, null);
       view.current = null;
