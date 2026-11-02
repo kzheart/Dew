@@ -31,13 +31,8 @@ function useMarks<T>(ms: number): [T[], (items: T[]) => void] {
   return [items, add];
 }
 
-/**
- * The files of the window's tab group, as the dock and the light table show them.
- * onHandedOver hears of a file closing while this page is in the background: the page may be the tab shown in its place.
- */
-export function useFiles(initial: FileTab[], onHandedOver?: () => void): ShownFile[] {
-  const handedOver = useRef(onHandedOver);
-  handedOver.current = onHandedOver;
+/** The files of the window's tab group, as the dock and the light table show them. */
+export function useFiles(initial: FileTab[]): ShownFile[] {
   const [tabs, setTabs] = useState(initial);
   const last = useRef(initial);
   // Kept for the page's life: a class that sets an animation restarts it when it comes off and on.
@@ -51,10 +46,7 @@ export function useFiles(initial: FileTab[], onHandedOver?: () => void): ShownFi
       last.current = next;
       setTabs(next);
       // A page in a background tab takes the change as is: it would show only the tail of an animation once it is selected.
-      if (document.hidden) {
-        if (c.closed.length) handedOver.current?.();
-        return;
-      }
+      if (document.hidden) return;
       addSaved(c.saved);
       addClosed(c.closed);
     };

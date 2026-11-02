@@ -1073,6 +1073,10 @@ async function tabChecks() {
     const watchDock = `window.e2eDockMarks = []; const dock = document.querySelector(".dock"); new MutationObserver(() => dock.getAnimations({ subtree: true }).forEach((a) => /^(dkBorn|dropFall|dkGone)$/.test(a.animationName) && window.e2eDockMarks.push(a.effect.target.closest(".dk").querySelector(".nm").textContent + " " + a.animationName))).observe(dock, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] })`;
     const dockMarks = (id: number) => s.at(id).page<string[]>(`return [...new Set(window.e2eDockMarks)]`);
     await top.s.page(watchDock);
+    // What the mist was as the page went to the background or came to the front: the swap happens under it.
+    const watchSwap = `window.e2eSwapVeil = undefined; window.addEventListener("visibilitychange", () => (window.e2eSwapVeil = document.querySelector("[data-veil]")?.dataset.veil ?? "none"), { capture: true, once: true })`;
+    const swapVeil = (id: number) => s.at(id).page<string | undefined>(`return window.e2eSwapVeil`);
+    await top.s.page(watchSwap);
     await top.s.page(`document.querySelector('.dock [aria-label="新建文件"]').click()`);
     const three = await settled("the new file's window", async () => {
       const ws = await s.windows();
@@ -1094,13 +1098,19 @@ async function tabChecks() {
     if (!added) return;
     // Its page clears from a mist where a drop lands on the first line, then leaves the page alone.
     const cleared = await settled("the new page's mist to clear", () =>
-      s.at(added.id).page<boolean>(`return !document.querySelector("[data-condense]") && !!document.querySelector("main .art-hint, main .cm-placeholder")`),
+      s.at(added.id).page<boolean>(`return !document.querySelector("[data-veil]") && !!document.querySelector("main .art-hint, main .cm-placeholder")`),
     );
+    const leftUnder = await swapVeil(top.win.id);
+    check("the page left for a new file is under its mist as its window goes", leftUnder === "covered", `its mist was ${leftUnder}`);
     check("a new file's page clears its mist and shows where to write", !!cleared, await s.at(added.id).page<string>(`return document.querySelector(".app").className`));
-    // Its entrance played under the mist; nothing replays once the mist is gone.
-    const entrances = `return document.getAnimations().map((a) => a.animationName).filter((n) => /^(paneIn|artA|artB|edIn|actGlow)$/.test(n))`;
-    const replayed = [...(await s.at(added.id).page<string[]>(entrances)), ...(await Bun.sleep(150).then(() => s.at(added.id).page<string[]>(entrances)))];
-    check("the new page's entrance does not play again after its mist clears", !replayed.length, replayed.join(", "));
+    // Its entrance waits under the mist and plays as it clears: one that starts later restarted.
+    const entrances = `return document.getAnimations().filter((a) => /^(paneIn|artA|artB|edIn|actGlow)$/.test(a.animationName) && (a.currentTime ?? 0) < 300).map((a) => a.animationName + " at " + Math.round(a.currentTime ?? 0))`;
+    const replayed: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      replayed.push(...(await s.at(added.id).page<string[]>(entrances)));
+      await Bun.sleep(100);
+    }
+    check("the new page's entrance plays once, not again after its mist clears", !replayed.length, replayed.join(", "));
     const leftMarks = await dockMarks(top.win.id);
     check("the page left for the new file does not animate it in its dock", !leftMarks.length, leftMarks.join(", "));
     await checkTitleBars("after a new file joins");
@@ -1145,7 +1155,7 @@ async function tabChecks() {
     // An untitled file with text asks to be saved instead of closing; its text says what wrote it.
     const untitledText = await fresh.page<string>(`return await mygo.call("Doc.Content")`);
     const behind = (await s.windows()).filter((w) => w.id !== added.id);
-    for (const w of behind) await s.at(w.id).page(watchDock);
+    for (const w of behind) await s.at(w.id).page(`${watchDock}; ${watchSwap}`);
     await fresh.page(`document.querySelector(".dk.on .dk-x").click()`);
     const closed = await settled("the untitled file to close", async () => {
       const ds = await docks();
@@ -1157,6 +1167,8 @@ async function tabChecks() {
       !!closed && !!shownAfter,
       closed ? summary(closed) : `${summary(await docks())}; untitled text ${JSON.stringify(untitledText)}`,
     );
+    const takers = await Promise.all(behind.map((w) => swapVeil(w.id)));
+    check("the tab shown in a closed one's place comes to the front under the same mist", takers.filter(Boolean).join() === "covered", `their mists ${JSON.stringify(takers)}`);
     const handedMarks = (await Promise.all(behind.map((w) => dockMarks(w.id)))).flat();
     check("the pages behind a closing file take its leaving without animating it in their docks", !handedMarks.length, handedMarks.join(", "));
 

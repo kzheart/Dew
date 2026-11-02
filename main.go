@@ -24,7 +24,7 @@ func main() {
 			return err
 		},
 		Equal:  func(a, b string) bool { return a == b },
-		Window: func(doc *mygo.Document[string]) *mygo.Window { return newDocumentWindow(files, welcome, doc) },
+		Window: func(doc *mygo.Document[string]) *mygo.Window { return newDocumentWindow(files, welcome, prefs, doc) },
 		// The welcome window stands in for the untitled document mygo would
 		// open at launch and on a click on the Dock icon.
 		NoUntitled: true,
@@ -56,14 +56,22 @@ func main() {
 // bindE2E binds the probes an e2e build adds.
 var bindE2E []func(*filesService)
 
-func newDocumentWindow(files *filesService, welcome *welcome, doc *mygo.Document[string]) *mygo.Window {
+func newDocumentWindow(files *filesService, welcome *welcome, prefs *prefsStore, doc *mygo.Document[string]) *mygo.Window {
 	// Before the window exists, which takes the focus as it shows.
 	host := files.host()
 	// A window that takes another's place, a tab in its group or the
-	// welcome window, shows once its page drew (Files.Shown) and the other
-	// steps aside in the same moment: shown first, it flashes a blank page,
-	// and a tab the native tab bar.
-	waits := host != nil || welcome.win != nil
+	// welcome window, shows once both pages are under the same mist: shown
+	// first, it flashes a blank page, and a tab the native tab bar.
+	from := host
+	if from == nil {
+		from = welcome.win
+	}
+	// Until its page draws, which may wait for the window to show, it
+	// shows its background: the mist it arrives under.
+	background := "#FFFFFF"
+	if from != nil {
+		background = mistColor(prefs)
+	}
 	win := mygo.NewWindow(mygo.WindowOptions{
 		URL:                  "/",
 		Width:                1280,
@@ -72,15 +80,28 @@ func newDocumentWindow(files *filesService, welcome *welcome, doc *mygo.Document
 		MinHeight:            420,
 		TitleBarStyle:        mygo.TitleBarHiddenInset,
 		TrafficLightPosition: &mygo.Point{X: 20, Y: 24},
-		BackgroundColor:      "#FFFFFF",
+		BackgroundColor:      background,
 		StateKey:             "document",
-		Hidden:               waits,
+		Hidden:               from != nil,
 	})
 	unlockFrameRate(win)
 	shareCardOnContextMenu(win)
-	files.adopt(win, host, doc, waits)
+	files.adopt(win, from, doc)
 	if host == nil {
 		welcome.replaceWith(win)
 	}
 	return win
+}
+
+// mistColor is the veil's color (src/styles/app.css) for the background
+// new windows start with.
+func mistColor(prefs *prefsStore) string {
+	p, _ := prefs.Get()
+	switch p.Background {
+	case BackgroundPaper:
+		return "#E8DCC2"
+	case BackgroundNight:
+		return "#303238"
+	}
+	return "#E3E8EF"
 }

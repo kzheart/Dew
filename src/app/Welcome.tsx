@@ -7,10 +7,12 @@ import { LightTable } from "./LightTable";
 import { QuickOpen } from "./QuickOpen";
 import { Toasts, useToasts } from "./Toasts";
 import { useRecent } from "./useRecent";
+import { Veil } from "./Veil";
 
 type Overlay = "palette" | "table" | null;
 
 const newFile = () => void host.files.new().catch(() => {});
+const away = { kind: "", role: "" };
 
 /** The page of the window the app shows while no document is open: start a file, or find a recent one again. */
 export function Welcome({ prefs }: { prefs: Prefs }) {
@@ -98,6 +100,7 @@ export function Welcome({ prefs }: { prefs: Prefs }) {
           onClose={close}
         />
       )}
+      <Veil part={away} />
     </div>
   );
 }

@@ -15,13 +15,14 @@ switch (pageOf(location.search)) {
     root.render(<Welcome prefs={await prefs} />);
     break;
   case "document": {
-    const [text, state, files, resume] = await Promise.all([
+    const [text, state, files, resume, part] = await Promise.all([
       host.doc.content(),
       host.doc.state(),
       host.files.list(),
       host.recent.resume().catch(() => 0),
+      host.files.part().catch(() => ({ kind: "", role: "" })),
     ]);
-    root.render(<App initial={{ text, state, prefs: await prefs, files, resume }} />);
+    root.render(<App initial={{ text, state, prefs: await prefs, files, resume, part }} />);
     break;
   }
 }

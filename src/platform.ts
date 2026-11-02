@@ -2,9 +2,9 @@ import { isMyGo, onDocumentReload, onDocumentState } from "mygo-runtime";
 import { docFileURL } from "./app/docFile";
 import { defaultPrefs } from "./defaultPrefs";
 import * as go from "./mygo";
-import type { CardBackground, Command, DocumentState, FileTab, FolderFile, PageGuard, Prefs, RecentFile, ViewState } from "./mygo";
+import type { CardBackground, Command, DocumentState, FileTab, FolderFile, Handoff, PageGuard, Prefs, RecentFile, ViewState } from "./mygo";
 
-export type { CardBackground, Command, DocumentState, FileTab, FolderFile, PageGuard, Prefs, RecentFile };
+export type { CardBackground, Command, DocumentState, FileTab, FolderFile, Handoff, PageGuard, Prefs, RecentFile };
 
 /** What the page needs from its host: the app's Go services, or stand-ins in a browser tab. */
 export interface Host {
@@ -25,10 +25,13 @@ export interface Host {
     select(id: number): Promise<void>;
     close(id: number): Promise<void>;
     "new"(): Promise<void>;
-    /** Shows the window once its page drew, for a tab that waits to join its group. */
-    shown(): Promise<void>;
-    /** Takes the window's tab off its group's list as the page starts to close it. */
-    leave(): Promise<void>;
+    /** The page's part in a swap of windows under way as it loads. */
+    part(): Promise<Handoff>;
+    /** The page, leaving in a swap, is under the mist. */
+    covered(): Promise<void>;
+    /** The page drew, under the mist when it arrives in a swap. */
+    ready(): Promise<void>;
+    onHandoff(fn: (h: Handoff) => void): () => void;
     content(id: number): Promise<string>;
     /** Opens a Markdown file as a tab of the focused group. */
     open(path: string): Promise<void>;
@@ -84,7 +87,7 @@ function appHost(): Host {
       onState: onDocumentState,
       onReload: onDocumentReload,
     },
-    files: { ...go.Files, onChange: (fn) => go.events.files.on(fn) },
+    files: { ...go.Files, onChange: (fn) => go.events.files.on(fn), onHandoff: (fn) => go.events.handoff.on(fn) },
     recent: { ...go.Recent, onChange: (fn) => go.events.recent.on(fn) },
     prefs: go.Prefs,
     exports: go.Export,
@@ -144,8 +147,10 @@ async function browserHost(): Promise<Host> {
       },
       close: async () => {},
       new: async () => {},
-      shown: async () => {},
-      leave: async () => {},
+      part: async () => ({ kind: "", role: "" }),
+      covered: async () => {},
+      ready: async () => {},
+      onHandoff: () => () => {},
       content: async (id) => {
         const p = paths[id - 1];
         return p === path ? text : p ? samples[p]!() : "";

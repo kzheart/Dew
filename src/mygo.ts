@@ -73,6 +73,22 @@ export interface FolderFile {
 /** Font is the typeface family of the rendered document. */
 export type Font = "serif" | "sans" | "mono";
 
+/**
+ * Handoff tells a page its part in a swap of windows: the page leaving
+ * ("out") covers itself in mist, and the page arriving ("in") starts
+ * under the same mist. The windows swap once both are covered, so the
+ * frame the swap shows is the same on both sides, and the arriving page
+ * clears the mist once it is the one shown.
+ */
+export interface Handoff {
+  /**
+   * Kind is "new" for a new file, "open" for a file opened in a window
+   * of its own, "close" for the file of a closing tab; "" for none.
+   */
+  kind: string;
+  role: string;
+}
+
 /** Mode is the view a window shows. */
 export type Mode = "live" | "preview" | "edit" | "split";
 
@@ -215,7 +231,8 @@ export const Doc = {
 export const Files = {
   /**
    * Close closes the document of the tab group's window id, which asks to
-   * save it first when it must: on its own tab, where the sheet shows.
+   * save it first when it must: on its own tab, where the sheet shows. The
+   * tab the caller shows hands over to a neighbor under the mist first.
    */
   close(id: number): Promise<void> {
     return call("Files.Close", id);
@@ -223,6 +240,10 @@ export const Files = {
   /** Content returns the text of the document of the tab group's window id. */
   content(id: number): Promise<string> {
     return call("Files.Content", id);
+  },
+  /** Covered reports that the calling page, leaving, is under the mist. */
+  covered(): Promise<void> {
+    return call("Files.Covered");
   },
   /**
    * Create writes an empty Markdown file named name in the folder of the
@@ -239,13 +260,6 @@ export const Files = {
    */
   folder(): Promise<FolderFile[]> {
     return call("Files.Folder");
-  },
-  /**
-   * Leave takes the calling window's tab off its group's list, as its page
-   * starts to close it.
-   */
-  leave(): Promise<void> {
-    return call("Files.Leave");
   },
   /**
    * List returns the documents of the calling window's tab group, in tab
@@ -265,16 +279,23 @@ export const Files = {
   open(path: string): Promise<void> {
     return call("Files.Open", path);
   },
+  /**
+   * Part is the calling page's part in a swap under way, for a page that
+   * loads in one: its first frame is already under the mist.
+   */
+  part(): Promise<Handoff> {
+    return call("Files.Part");
+  },
+  /**
+   * Ready reports that the calling page drew, under the mist when it
+   * arrives in a swap.
+   */
+  ready(): Promise<void> {
+    return call("Files.Ready");
+  },
   /** Select shows the document of the tab group's window id. */
   select(id: number): Promise<void> {
     return call("Files.Select", id);
-  },
-  /**
-   * Shown shows the calling window once its page drew: a tab that joins a
-   * group waits for it, so it never shows a page still loading.
-   */
-  shown(): Promise<void> {
-    return call("Files.Shown");
   },
 } as const;
 
@@ -427,6 +448,7 @@ export const Assets = {
 
 /** Events sent by the Go side. Subscribe with `events.name.on(listener)`. */
 export const events = {
+  handoff: event<Handoff>("handoff"),
   /** Commands carries menu commands to the page of the focused window. */
   command: event<Command>("command"),
   /**

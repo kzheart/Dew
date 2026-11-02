@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/egoist/mygo"
 )
@@ -41,10 +40,10 @@ type filesService struct {
 
 	mu sync.Mutex
 	// unlisted holds the tabs the rest of their group does not list: one
-	// joining, created hidden until its page drew, and one leaving, whose
-	// page goes up as vapor before it closes. The tab shown in a leaving
-	// one's place learns of it while still in the background.
+	// joining, hidden until it takes another's place, and one leaving,
+	// which hands its place over before it closes.
 	unlisted map[*mygo.Window]listing
+	handoffs []*handoff
 }
 
 type listing int
@@ -70,7 +69,8 @@ func (s *filesService) Select(ctx context.Context, id int) error {
 }
 
 // Close closes the document of the tab group's window id, which asks to
-// save it first when it must: on its own tab, where the sheet shows.
+// save it first when it must: on its own tab, where the sheet shows. The
+// tab the caller shows hands over to a neighbor under the mist first.
 func (s *filesService) Close(ctx context.Context, id int) error {
 	w, err := s.member(ctx, id)
 	if err != nil {
@@ -78,43 +78,26 @@ func (s *filesService) Close(ctx context.Context, id int) error {
 	}
 	if d := s.docs.ForWindow(w); d != nil && d.IsEdited() {
 		selectTab(w)
+		w.Close()
+		return nil
 	}
-	w.Close()
+	if w != mygo.CallerWindow(ctx) {
+		w.Close()
+		return nil
+	}
+	group := tabGroup(w)
+	var to *mygo.Window
+	// The tab after it, as AppKit picks, or else the one before.
+	if i := slices.Index(group, w); i >= 0 && len(group) > 1 {
+		to = group[min(i+1, len(group)-1)]
+		if i == len(group)-1 {
+			to = group[i-1]
+		}
+	}
+	s.setListing(w, leaving)
+	s.refresh()
+	s.handOver(&handoff{kind: "close", from: w, to: to, then: w.Close})
 	return nil
-}
-
-// Shown shows the calling window once its page drew: a tab that joins a
-// group waits for it, so it never shows a page still loading.
-func (s *filesService) Shown(ctx context.Context) {
-	s.show(mygo.CallerWindow(ctx))
-}
-
-// show shows win as the selected tab of its group, once, if it waits to.
-func (s *filesService) show(win *mygo.Window) {
-	if !s.joined(win) {
-		return
-	}
-	hideTabBar(win)
-	selectTab(win)
-	s.refresh()
-}
-
-// Leave takes the calling window's tab off its group's list, as its page
-// starts to close it.
-func (s *filesService) Leave(ctx context.Context) {
-	s.setListing(mygo.CallerWindow(ctx), leaving)
-	s.refresh()
-}
-
-// joined ends win's wait to join its group, reporting whether it waited.
-func (s *filesService) joined(win *mygo.Window) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	waited := s.unlisted[win] == joining
-	if waited {
-		delete(s.unlisted, win)
-	}
-	return waited
 }
 
 func (s *filesService) setListing(win *mygo.Window, l listing) {
@@ -202,17 +185,20 @@ func (s *filesService) host() *mygo.Window {
 	return nil
 }
 
-// adopt makes win, which shows doc, a tab of host's group, and keeps the
-// group's docks and the recent files up to date. A win that waits to show
-// stays off the group's list until its page drew. Its first list goes out
-// once mygo attached doc to win and told its state.
-func (s *filesService) adopt(win, host *mygo.Window, doc *mygo.Document[string], waits bool) {
-	if waits {
-		s.setListing(win, joining)
-		// A page that fails before it draws still shows, for the user to close.
-		time.AfterFunc(2*time.Second, func() { s.show(win) })
+// adopt makes win, which shows doc, a tab of from's group, and keeps the
+// group's docks and the recent files up to date. A win that takes from's
+// place, a document's tab or the welcome window, starts hidden and swaps
+// in under the mist; as a background tab, it draws before it shows. Its
+// first list goes out once mygo attached doc to win and told its state.
+func (s *filesService) adopt(win, from *mygo.Window, doc *mygo.Document[string]) {
+	if from != nil {
+		kind := "open"
+		if doc.State().Path == "" {
+			kind = "new"
+		}
+		s.handOver(&handoff{kind: kind, from: from, to: win})
 	}
-	joinTabGroup(win, host)
+	joinTabGroup(win, from)
 	// The window outlives the document's state: mygo detaches it first.
 	path := ""
 	doc.OnStateChange(func(st mygo.DocumentState) {

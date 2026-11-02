@@ -13,13 +13,12 @@ import { reuseUnchanged } from "../markdown/reuse";
 import { toggleTask } from "../markdown/source";
 import { Article } from "../preview/Article";
 import type { BlockActions, LightboxTarget } from "../preview/actions";
-import { host, type Command, type DocumentState, type FileTab, type Prefs } from "../platform";
+import { host, type Command, type DocumentState, type FileTab, type Handoff, type Prefs } from "../platform";
 import { changedKeys } from "../state/prefs";
 import { fileName } from "../state/recent";
 import { glassStyle } from "../state/settings";
 import { modeOf, viewReducer, type ViewState } from "../state/view";
 import { Divider, StatusBar, Toc } from "./Chrome";
-import { Condense, Haze } from "./Condense";
 import { Dock } from "./Dock";
 import { Header, type ExportAction, type Popover } from "./Header";
 import { useDebouncedEffect, usePresence } from "./hooks";
@@ -34,6 +33,7 @@ import { useFiles } from "./useFiles";
 import { useReadingProgress } from "./useReadingProgress";
 import { useRecent } from "./useRecent";
 import { useScrollSync } from "./useScrollSync";
+import { Veil } from "./Veil";
 
 export interface Initial {
   text: string;
@@ -42,19 +42,13 @@ export interface Initial {
   files: FileTab[];
   /** How far the document was read when it last closed, from 0 to 1. */
   resume: number;
+  part: Handoff;
 }
 
 export function App({ initial }: { initial: Initial }) {
   const doc = useDocument(initial);
-  const [hazy, setHazy] = useState(false);
-  const files = useFiles(initial.files, () => setHazy(true));
+  const files = useFiles(initial.files);
   const joined = initial.files.length > 1;
-  // A new, blank file's page, as a tab or in the welcome window's place: a drop condenses it, and a dock that waits for the drop.
-  const [fresh] = useState(
-    () => !initial.text && !!initial.files.find((f) => f.current)?.untitled && !matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
-  const [condensing, setCondensing] = useState(fresh);
-  const [evaporating, setEvaporating] = useState(false);
   const recent = useRecent();
   const [prefs, setPrefs] = useState(initial.prefs);
   const [view, dispatch] = useReducer(viewReducer, {
@@ -309,20 +303,7 @@ export function App({ initial }: { initial: Initial }) {
     }
   };
   useEffect(() => host.onCommand((c) => onCommand.current(c)), []);
-  useEffect(() => {
-    void host.files.shown().catch(() => {});
-  }, []);
-
-  // The page closing its own file goes up as vapor first; one that asks to be saved closes at once, for its sheet.
-  const closeFile = (id: number) => {
-    const f = files.find((x) => x.id === id);
-    const close = () => void host.files.close(id).catch(() => setEvaporating(false));
-    if (!f?.current || f.edited || matchMedia("(prefers-reduced-motion: reduce)").matches) return close();
-    setEvaporating(true);
-    // The tab shown in this one's place learns of it now, while in the background, and takes the same vapor.
-    void host.files.leave().catch(() => {});
-    setTimeout(close, 420);
-  };
+  const closeFile = (id: number) => void host.files.close(id).catch(() => {});
 
   useEffect(() => {
     const sync = () => host.syncView({ mode, focus, inline: prefs.inline });
@@ -334,7 +315,7 @@ export function App({ initial }: { initial: Initial }) {
   const theme = showEd && !isSplit ? "" : prefs.bg === "night" ? " th-night" : prefs.bg === "paper" ? " th-paper" : "";
 
   return (
-    <div style={glassStyle(prefs.glass)} className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}${setting ? " set-on" : ""}${joined ? " joined" : ""}${fresh ? " fresh" : ""}${evaporating ? " evaporating" : ""}`}>
+    <div style={glassStyle(prefs.glass)} className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}${setting ? " set-on" : ""}${joined ? " joined" : ""}`}>
       <main className="main">
         {showEd && (
           <section className="pane-ed" aria-label="源码编辑" style={{ flex: isSplit ? `0 0 ${split}%` : "1 1 auto" }}>
@@ -377,9 +358,7 @@ export function App({ initial }: { initial: Initial }) {
         )}
       </main>
       <div className="edge" aria-hidden="true" />
-      {condensing && <Condense onDone={() => setCondensing(false)} />}
-      {evaporating && <span className="vapor" aria-hidden="true" />}
-      {hazy && <Haze onDone={() => setHazy(false)} />}
+      <Veil part={initial.part} />
       <Header
         doc={doc.state}
         view={view}
