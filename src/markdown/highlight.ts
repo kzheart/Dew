@@ -1,4 +1,5 @@
 import hljs from "highlight.js/lib/common";
+import type { DiffLine, ParsedDiff } from "./diff";
 
 /** highlight.js scopes in the prototype's token colors. */
 const SCOPES: Record<string, string> = {
@@ -55,7 +56,19 @@ export function languageLabel(lang: string): string {
   return LANGS[lang.toLowerCase()] ?? lang;
 }
 
-const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+export const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/**
+ * One HTML string per diff line. The code lines are highlighted together in
+ * the language of the file the diff names; hunk and meta lines stay plain.
+ */
+export function highlightDiff(diff: ParsedDiff, title: string): string[] {
+  const isCode = (l: DiffLine) => l.type !== "hunk" && l.type !== "meta";
+  const lang = /\.([\w+-]+)$/.exec(title)?.[1] ?? "";
+  const code = highlightLines(diff.lines.filter(isCode).map((l) => l.text).join("\n"), lang);
+  let i = 0;
+  return diff.lines.map((l) => (isCode(l) ? code[i++]! : escapeHtml(l.text)));
+}
 
 /** One HTML string per line of code, with tk-* spans that never cross a line. */
 export function highlightLines(code: string, lang: string): string[] {

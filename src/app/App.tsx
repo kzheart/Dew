@@ -8,7 +8,7 @@ import { useLive } from "../live/useLive";
 import { parseDocument } from "../markdown/parse";
 import { toggleTask } from "../markdown/source";
 import { Article } from "../preview/Article";
-import type { BlockActions, CodeBlock } from "../preview/Blocks";
+import type { BlockActions, LightboxTarget } from "../preview/actions";
 import { host, type Command, type DocumentState, type Prefs } from "../platform";
 import { modeOf, viewReducer, type ViewState } from "../state/view";
 import { Divider, StatusBar, Toc } from "./Chrome";
@@ -39,9 +39,9 @@ export function App({ initial }: { initial: Initial }) {
   const [cursor, setCursor] = useState<Cursor | null>(null);
   const [split, setSplit] = useState(50);
   const edView = useRef<EditorView | null>(null);
-  const [zoomed, setZoomed] = useState<CodeBlock | null>(null);
+  const [zoomed, setZoomed] = useState<LightboxTarget | null>(null);
   const lightbox = usePresence(zoomed !== null, 200);
-  const lastZoomed = useRef<CodeBlock | null>(null);
+  const lastZoomed = useRef<LightboxTarget | null>(null);
   if (zoomed) lastZoomed.current = zoomed;
   const closeLightbox = useCallback(() => setZoomed(null), []);
 
@@ -125,7 +125,7 @@ export function App({ initial }: { initial: Initial }) {
         edit((t) => toggleTask(t, line));
         if (edView.current) flashLine(edView.current, line, 1200);
       },
-      onZoomCode: setZoomed,
+      onZoom: setZoomed,
     }),
     [prefs.showLn, edit],
   );
@@ -252,10 +252,10 @@ export function App({ initial }: { initial: Initial }) {
         onKeepMine={() => void host.doc.keepMine().catch(() => {})}
         onRevert={() => void host.doc.revert().catch(() => {})}
       />
-      {lightbox.mounted && lastZoomed.current && (
+      {lightbox.mounted && lastZoomed.current?.kind === "code" && (
         <Lightbox
-          block={lastZoomed.current}
-          section={parsed.headings.filter((h) => h.line < lastZoomed.current!.start).at(-1)?.text ?? null}
+          block={lastZoomed.current.block}
+          section={parsed.headings.filter((h) => h.line < lastZoomed.current!.block.start).at(-1)?.text ?? null}
           showLineNumbers={prefs.showLn}
           leaving={lightbox.leaving}
           onClose={closeLightbox}

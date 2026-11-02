@@ -161,6 +161,23 @@ describe("edge cases", () => {
     expect(starts).toEqual([...starts].sort((a, b) => a - b));
   });
 
+  test("a fence names its file after the language, and its language picks how it shows", () => {
+    const code = (src: string) => {
+      const b = parseDocument(src).blocks[0]!;
+      if (b.kind !== "code") throw new Error(b.kind);
+      return [b.lang, b.title, b.view];
+    };
+    expect(code("```diff src/sync.ts\n-a\n+b\n```")).toEqual(["diff", "src/sync.ts", { kind: "diff" }]);
+    expect(code("```ts {2,4}\nx\n```")).toEqual(["ts", "", { kind: "plain" }]);
+    expect(code("```py main.py {3}\nx\n```")).toEqual(["py", "main.py", { kind: "plain" }]);
+    expect(code("```mermaid\nflowchart LR\n```")).toEqual(["mermaid", "", { kind: "diagram", engine: "mermaid" }]);
+    expect(code("```puml\n@startuml\n```")[2]).toEqual({ kind: "diagram", engine: "plantuml" });
+    expect(code("```PlantUML\n@startuml\n```")[2]).toEqual({ kind: "diagram", engine: "plantuml" });
+    expect(code("```vegalite\n{}\n```")[2]).toEqual({ kind: "diagram", engine: "vega-lite" });
+    expect(code("```vega-lite\n{}\n```")[2]).toEqual({ kind: "diagram", engine: "vega-lite" });
+    expect(code("    indented\n")).toEqual(["", "", { kind: "plain" }]);
+  });
+
   test("highlighted line ranges", () => {
     expect(highlightedLines("ts {2,4-6}")).toEqual([2, 4, 5, 6]);
     expect(highlightedLines("ts")).toEqual([]);

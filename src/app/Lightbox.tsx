@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { languageLabel } from "../markdown/highlight";
-import { CodeLines, searchHits, useHighlighted, type CodeBlock } from "../preview/Blocks";
+import type { CodeBlock } from "../preview/actions";
+import { CodeLines, searchHits, useHighlighted } from "../preview/Code";
 
 const ZOOM_MIN = 60;
 const ZOOM_MAX = 200;

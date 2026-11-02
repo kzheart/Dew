@@ -1,4 +1,5 @@
 import { isMyGo, onDocumentReload, onDocumentState } from "mygo-runtime";
+import { defaultPrefs } from "./defaultPrefs";
 import * as go from "./mygo";
 import type { Command, DocumentState, Prefs, ViewState } from "./mygo";
 
@@ -28,11 +29,6 @@ export interface Host {
   syncView(s: ViewState): void;
 }
 
-export const defaultPrefs: Prefs = {
-  mw: 720, fs: 16, lh: 1.75, pg: 1, ff: "sans", bg: "white",
-  base: "live", source: "off", inline: false, showLn: true,
-};
-
 function appHost(): Host {
   return {
     inApp: true,
@@ -53,10 +49,15 @@ function appHost(): Host {
   };
 }
 
-/** A browser tab edits the sample in memory and exports nothing. */
+const samples = import.meta.glob<string>("../samples/*.md", { query: "?raw", import: "default" });
+
+/** A browser tab edits a sample in memory (?doc=<name> picks it) and exports nothing. */
 async function browserHost(): Promise<Host> {
-  let text = (await import("../samples/版本说明.md?raw")).default;
-  let state: DocumentState = { name: "版本说明.md", path: "", edited: false, readOnly: false, conflict: false, deleted: false };
+  const wanted = `../samples/${new URLSearchParams(location.search).get("doc")}.md`;
+  const path = wanted in samples ? wanted : "../samples/版本说明.md";
+  const name = path.slice("../samples/".length);
+  let text = await samples[path]!();
+  let state: DocumentState = { name, path: "", edited: false, readOnly: false, conflict: false, deleted: false };
   const listeners = new Set<(s: DocumentState) => void>();
   const setState = (s: DocumentState) => {
     state = s;

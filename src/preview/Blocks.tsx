@@ -1,26 +1,8 @@
-import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { highlightLines, languageLabel } from "../markdown/highlight";
+import { memo, useContext, useState, type ReactNode } from "react";
 import type { Block } from "../markdown/parse";
-import { Calendar, calloutIcons, Check, Chevron, CopyIcon, Expand, Hash, Person } from "./icons";
-
-export type CodeBlock = Extract<Block, { kind: "code" }>;
-
-export interface BlockActions {
-  /** False when rendering for an export: no buttons, everything open. */
-  interactive: boolean;
-  showLineNumbers: boolean;
-  onToggleLineNumbers(): void;
-  onToggleTask(line: number): void;
-  onZoomCode(block: CodeBlock): void;
-}
-
-export const BlockActionsContext = createContext<BlockActions>({
-  interactive: false,
-  showLineNumbers: true,
-  onToggleLineNumbers() {},
-  onToggleTask() {},
-  onZoomCode() {},
-});
+import { BlockActionsContext } from "./actions";
+import { Code } from "./Code";
+import { Calendar, calloutIcons, Chevron, Person } from "./icons";
 
 const html = (h: string) => ({ __html: h });
 
@@ -179,100 +161,6 @@ function List({ block }: { block: Extract<Block, { kind: "list" }> }) {
   );
 }
 
-export function codeMeta(highlight: number[]): string {
-  if (!highlight.length) return "";
-  const parts: string[] = [];
-  for (let i = 0; i < highlight.length; ) {
-    let j = i;
-    while (j + 1 < highlight.length && highlight[j + 1] === highlight[j]! + 1) j++;
-    parts.push(j - i >= 2 ? `${highlight[i]}–${highlight[j]}` : highlight.slice(i, j + 1).join("、"));
-    i = j + 1;
-  }
-  return `高亮第 ${parts.join("、")} 行`;
-}
-
-export function useHighlighted(block: CodeBlock) {
-  return useMemo(() => highlightLines(block.code, block.lang), [block.code, block.lang]);
-}
-
-function Code({ block }: { block: CodeBlock }) {
-  const { interactive, showLineNumbers, onToggleLineNumbers, onZoomCode } = useContext(BlockActionsContext);
-  const lines = useHighlighted(block);
-  const [copied, copy] = useCopied(block.code);
-  const meta = codeMeta(block.highlight);
-  return (
-    <div {...attrs(block, "cb")}>
-      <div className="cb-head">
-        <span className="cb-lang">{languageLabel(block.lang)}</span>
-        {meta && <span className="cb-meta">{meta}</span>}
-        <span style={{ flex: "1 1 auto" }} />
-        {interactive && (
-          <>
-            <button className="cb-btn" aria-pressed={showLineNumbers} onClick={onToggleLineNumbers} aria-label="显示行号" title="行号">
-              <Hash />
-            </button>
-            <button className="cb-btn" onClick={() => onZoomCode(block)} aria-label="放大查看" title="放大查看">
-              <Expand />
-            </button>
-            <button className={copied ? "cb-btn ok" : "cb-btn"} onClick={copy}>
-              {copied ? <><Check key="ok" className="ic-pop" />已拷贝</> : <><CopyIcon key="copy" className="ic-pop" />拷贝</>}
-            </button>
-          </>
-        )}
-      </div>
-      <CodeLines lines={lines} highlight={block.highlight} showLineNumbers={showLineNumbers} />
-    </div>
-  );
-}
-
-export function CodeLines({ lines, highlight, showLineNumbers, hits, className = "cb-body", fontSize }: {
-  lines: string[];
-  highlight: number[];
-  showLineNumbers: boolean;
-  hits?: Set<number>;
-  className?: string;
-  fontSize?: number;
-}) {
-  return (
-    <pre className={className} style={fontSize ? { fontSize } : undefined}>
-      {lines.map((l, i) => (
-        <span key={i} className={`cl${highlight.includes(i + 1) ? " cl-hl" : ""}${hits?.has(i) ? " lb-hit" : ""}`}>
-          {showLineNumbers && <span className="cb-ln">{i + 1}</span>}
-          <span dangerouslySetInnerHTML={html(l)} />
-        </span>
-      ))}
-    </pre>
-  );
-}
-
-function useCopied(text: string): [boolean, () => void] {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  return [
-    copied,
-    () => {
-      void copyText(text);
-      setCopied(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), 1600);
-    },
-  ];
-}
-
-export async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    document.body.append(ta);
-    ta.select();
-    document.execCommand("copy");
-    ta.remove();
-  }
-}
-
 const SHORTCUT = /^[⌘⌥⇧⌃]+[^\s<]{1,6}$/;
 
 function Table({ block }: { block: Extract<Block, { kind: "table" }> }) {
@@ -294,13 +182,4 @@ function Table({ block }: { block: Extract<Block, { kind: "table" }> }) {
       </div>
     </div>
   );
-}
-
-/** Lines (0-based) of code that contain query, ignoring case; none for a blank query. */
-export function searchHits(code: string, query: string): Set<number> {
-  const q = query.trim().toLowerCase();
-  const hits = new Set<number>();
-  if (!q) return hits;
-  code.split("\n").forEach((line, i) => line.toLowerCase().includes(q) && hits.add(i));
-  return hits;
 }

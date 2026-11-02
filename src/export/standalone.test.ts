@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { defaultPrefs } from "../platform";
+import { defaultPrefs } from "../defaultPrefs";
 import { parseDocument } from "../markdown/parse";
 import { baseName, documentTitle, renderArticle, standaloneDocument } from "./standalone";
 

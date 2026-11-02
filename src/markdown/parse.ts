@@ -11,6 +11,9 @@ interface Span {
 
 export type CalloutVariant = "note" | "tip" | "important" | "warning" | "caution";
 export type Align = "left" | "center" | "right" | null;
+export type DiagramEngine = "mermaid" | "plantuml" | "vega-lite";
+/** How a code block shows its code: as code, as a diff, or as the chart it describes. */
+export type CodeView = { kind: "plain" } | { kind: "diff" } | { kind: "diagram"; engine: DiagramEngine };
 
 export interface ListItem extends Span {
   /** null for an item that is not a task. */
@@ -33,7 +36,7 @@ export type Block = Span &
     | { kind: "callout"; variant: CalloutVariant; title: string; folded: boolean; html: string }
     | { kind: "list"; ordered: boolean; startNumber: number; tasksOnly: boolean; items: ListItem[]; tasks: TaskCount }
     | { kind: "quote"; html: string }
-    | { kind: "code"; lang: string; info: string; code: string; highlight: number[] }
+    | { kind: "code"; lang: string; info: string; title: string; view: CodeView; code: string; highlight: number[] }
     | { kind: "table"; align: Align[]; header: string[]; rows: string[][] }
     | { kind: "math"; tex: string; html: string }
     | { kind: "footnotes"; items: FootnoteItem[] }
@@ -163,7 +166,17 @@ export function parseDocument(text: string, options: ParseOptions = {}): ParsedD
       case "fence":
       case "code_block": {
         const info = t.info.trim();
-        blocks.push({ kind: "code", ...span, lang: info.split(/[\s{]/)[0] ?? "", info, code: t.content.replace(/\n$/, ""), highlight: highlightedLines(info) });
+        const lang = info.split(/[\s{]/)[0] ?? "";
+        blocks.push({
+          kind: "code",
+          ...span,
+          lang,
+          info,
+          title: info.slice(lang.length).replace(/\{[^}]*\}/g, "").trim(),
+          view: VIEWS[lang.toLowerCase()] ?? PLAIN,
+          code: t.content.replace(/\n$/, ""),
+          highlight: highlightedLines(info),
+        });
         break;
       }
       case "table_open":
@@ -340,6 +353,20 @@ function table(tokens: Token[], span: Span, env: RenderEnv): Block {
   }
   return { kind: "table", ...span, align, header, rows };
 }
+
+const PLAIN: CodeView = { kind: "plain" };
+const diagram = (engine: DiagramEngine): CodeView => ({ kind: "diagram", engine });
+
+/** Fence languages that show as something other than plain code. */
+const VIEWS: Record<string, CodeView> = {
+  diff: { kind: "diff" },
+  patch: { kind: "diff" },
+  mermaid: diagram("mermaid"),
+  plantuml: diagram("plantuml"),
+  puml: diagram("plantuml"),
+  "vega-lite": diagram("vega-lite"),
+  vegalite: diagram("vega-lite"),
+};
 
 /** `ts {2,4-6}` highlights lines 2, 4, 5 and 6. */
 export function highlightedLines(info: string): number[] {

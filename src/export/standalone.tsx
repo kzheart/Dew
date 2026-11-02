@@ -2,14 +2,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ParsedDocument } from "../markdown/parse";
 import type { Prefs } from "../platform";
 import { typographyStyle, type Typography } from "../preview/Article";
-import { BlockActionsContext, BlockView, type BlockActions } from "../preview/Blocks";
+import { BlockActionsContext, type BlockActions } from "../preview/actions";
+import { BlockView } from "../preview/Blocks";
 
 const exportActions = (showLineNumbers: boolean): BlockActions => ({
   interactive: false,
   showLineNumbers,
   onToggleLineNumbers() {},
   onToggleTask() {},
-  onZoomCode() {},
+  onZoom() {},
 });
 
 /** The document as static article markup: every block open, no controls. */

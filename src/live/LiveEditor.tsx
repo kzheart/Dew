@@ -8,7 +8,7 @@ import { liveSyntax } from "../editor/syntax";
 import { languageLabel } from "../markdown/highlight";
 import { highlightedLines, type Block } from "../markdown/parse";
 import { diff } from "../markdown/source";
-import { codeMeta } from "../preview/Blocks";
+import { codeMeta } from "../preview/Code";
 import type { Caret } from "./session";
 
 interface Props {

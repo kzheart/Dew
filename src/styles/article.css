@@ -108,7 +108,8 @@
 .art .img{margin:0;text-align:center}
 .art .img img,.art .html-blk img{max-width:100%;border-radius:10px}
 
-.cb{border-radius:14px;background:#F7F7F8;border:.5px solid rgba(0,0,0,.1);overflow:hidden;font-size:12.5px;line-height:1.75}
+/* clip, not hidden: hidden would make the block the scroller its sticky 收起 button sticks to. */
+.cb{border-radius:14px;background:#F7F7F8;border:.5px solid rgba(0,0,0,.1);overflow:clip;font-size:12.5px;line-height:1.75}
 .cb-head{display:flex;align-items:center;gap:2px;padding:6px 6px 6px 14px;font-family:-apple-system,'PingFang SC',sans-serif;flex-wrap:wrap}
 .cb-lang{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;background:rgba(0,0,0,.06);color:#3A3A3E;line-height:1.4}
 .cb-meta{font-size:11.5px;color:#5E5E63;margin-left:6px}
@@ -131,6 +132,40 @@
 .bg-night .cb-btn:hover{background:#333336}
 .bg-night .cb-ln,.bg-night .cb-meta{color:#8F8F96}
 .bg-night .cb-lang{background:#333336;color:#D8D8DC}
+/* Rows as wide as the widest one, so line backgrounds reach the end of a scrolled line. */
+pre.cb-body,pre.lb-code{display:grid;grid-template-columns:minmax(100%,max-content);align-content:start}
+
+/* Diffs: red and green after the code block artboard, with a mark column for color-blind readers. */
+.df-count{font-family:'SF Mono',Menlo,'JetBrains Mono',monospace;font-size:11.5px;font-weight:600;margin-left:8px}
+.df-count + .df-count{margin-left:4px}
+.df-add{color:#0B6B4E}
+.df-del{color:#B42318}
+.dl{display:flex;padding:0 16px 0 8px;white-space:pre;min-height:1lh}
+.dl-no{flex:0 0 34px;text-align:right;padding-right:8px;color:#6E6E73;user-select:none}
+.dl-mark{flex:0 0 20px;text-align:center;font-weight:600;user-select:none}
+.dl-hunk{background:#EDEFF3;color:#4A5262}
+.dl-meta{color:#6E6E73}
+.dl-add{background:#DEF2E6}
+.dl-add .dl-mark,.dl-add .dl-no{color:#0B6B4E}
+.dl-add .dl-tx{color:#0A4F3A}
+.dl-del{background:#FBE6E3}
+.dl-del .dl-mark{color:#B42318}
+.dl-del .dl-no{color:#9A3A2E}
+.dl-del .dl-tx{color:#7A271A}
+.bg-paper .dl-no,.bg-paper .dl-meta{color:#6B5B45}
+.bg-paper .dl-hunk{background:#E4D6B8;color:#5A4B36}
+.bg-paper .dl-add{background:#DCE3C2}
+.bg-paper .dl-del{background:#EED3C1}
+.bg-paper .dl-add .dl-no{color:#0B6B4E}
+.bg-paper .dl-del .dl-no{color:#9A3A2E}
+.bg-night .dl-no,.bg-night .dl-meta{color:#8F8F96}
+.bg-night .dl-hunk{background:#2B2F3B;color:#A9B3C7}
+.bg-night .dl-add{background:#1C3328}
+.bg-night .dl-del{background:#3B2224}
+.bg-night .dl-add .dl-mark,.bg-night .dl-add .dl-no,.bg-night .df-add{color:#6FD3AE}
+.bg-night .dl-add .dl-tx{color:#C6E4D8}
+.bg-night .dl-del .dl-mark,.bg-night .dl-del .dl-no,.bg-night .df-del{color:#FF8170}
+.bg-night .dl-del .dl-tx{color:#F0D2CE}
 .tk-mark,.tk-meta,.tk-pun,.tk-fence,.tk-pipe,.tk-com{color:#6E6E73}
 .tk-com{font-style:italic}
 .tk-key{color:#0A66D8}

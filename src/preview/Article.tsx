@@ -1,7 +1,8 @@
 import { Fragment, memo, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref } from "react";
 import type { Block, ParsedDocument } from "../markdown/parse";
 import type { Prefs } from "../platform";
-import { BlockActionsContext, BlockView, type BlockActions } from "./Blocks";
+import { BlockActionsContext, type BlockActions } from "./actions";
+import { BlockView } from "./Blocks";
 import { articleItems, type LineRange } from "./layout";
 
 export type Typography = Pick<Prefs, "mw" | "fs" | "lh" | "pg" | "ff">;
