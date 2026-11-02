@@ -1,0 +1,25 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "include-component-in-tag": false,
+  "pull-request-title-pattern": "chore: 发布 v${version}",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "dew",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [{ "type": "generic", "path": "mygo.config.ts" }],
+      "changelog-sections": [
+        { "type": "feat", "section": "新功能" },
+        { "type": "fix", "section": "问题修复" },
+        { "type": "perf", "section": "性能优化" },
+        { "type": "revert", "section": "回退" },
+        { "type": "docs", "section": "文档", "hidden": true },
+        { "type": "test", "section": "测试", "hidden": true },
+        { "type": "refactor", "section": "重构", "hidden": true },
+        { "type": "build", "section": "构建", "hidden": true },
+        { "type": "ci", "section": "持续集成", "hidden": true },
+        { "type": "chore", "section": "杂项", "hidden": true }
+      ]
+    }
+  }
+}
