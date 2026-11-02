@@ -180,7 +180,7 @@ export const Doc = {
 export const Files = {
   /**
    * Close closes the document of the tab group's window id, which asks to
-   * save it first when it must.
+   * save it first when it must: on its own tab, where the sheet shows.
    */
   close(id: number): Promise<void> {
     return call("Files.Close", id);

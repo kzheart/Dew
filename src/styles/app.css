@@ -636,9 +636,10 @@ header.bar{transition:padding .45s cubic-bezier(.3,1.25,.45,1)}
 .nm{display:inline-block;max-width:0;opacity:0;margin-left:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;transition:max-width .5s cubic-bezier(.3,1.2,.45,1),opacity .25s ease,margin .5s cubic-bezier(.3,1.2,.45,1)}
 .dk.on .nm{max-width:170px;opacity:1;margin-left:8px;font-weight:500;color:#1D1D1F}
 .th-night .dk.on .nm{color:#FFFFFF}
-.dock:hover .dk .nm{max-width:140px;opacity:1;margin-left:7px;transition-delay:.35s,.35s,.35s}
-.dock:hover .dk.on .nm{transition-delay:0s,0s,0s}
-.dock:hover .dk:not(.on) .dk-btn:hover{transform:translateY(-2px)}
+/* The name of a file in the background floats above its drop, so hovering never moves what is under the pointer. */
+.dk-tip{position:absolute;left:50%;bottom:calc(100% + 14px);transform:translate(-50%,4px);max-width:220px;padding:5px 10px;border-radius:8px;background:rgba(40,40,44,.88);color:#FFFFFF;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;pointer-events:none;transition:opacity .15s ease,transform .2s ease}
+.th-night .dk-tip{background:rgba(236,236,240,.92);color:#1D1D1F}
+.dk-btn:hover + .dk-tip{opacity:1;transform:translate(-50%,0);transition-delay:.12s}
 .dk-x{width:0;height:22px;margin-right:0;padding:0;border:0;border-radius:50%;background:transparent;display:inline-flex;align-items:center;justify-content:center;color:#6E6E73;opacity:0;overflow:hidden;cursor:default;transition:width .4s cubic-bezier(.3,1.3,.45,1),opacity .2s ease,margin .4s ease,background-color .15s ease}
 .dk.on .dk-x,.dk-x:focus-visible{width:22px;opacity:1;margin-right:7px}
 .dk-x:hover{background:rgba(0,0,0,.08)}

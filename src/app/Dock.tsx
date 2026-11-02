@@ -28,10 +28,11 @@ export function Dock({ files, onSelect, onClose, onNew, onOverview }: {
         const tip = `${f.name}，${fileStatus(f)}`;
         return (
           <div key={f.id} className={`dk${f.current ? " on" : ""}${f.closing ? " closing" : ""}${f.born ? " born" : ""}`}>
-            <button className="dk-btn" aria-label={tip} title={tip} aria-current={f.current ? "page" : undefined} onClick={() => !f.current && onSelect(f.id)}>
+            <button className="dk-btn" aria-label={tip} aria-current={f.current ? "page" : undefined} onClick={() => !f.current && onSelect(f.id)}>
               <span className={state === "dirty" ? "m18 trem" : "m18"} aria-hidden="true"><Tear state={state} ripple={f.ripple} /></span>
               <span className="nm">{f.name}</span>
             </button>
+            {!f.current && <span className="dk-tip" aria-hidden="true">{f.name}</span>}
             {closable && (
               <button className="dk-x" aria-label={`关闭 ${f.name}`} title="关闭 ⌘W" onClick={() => onClose(f.id)}>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
