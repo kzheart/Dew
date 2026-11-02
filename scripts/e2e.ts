@@ -488,6 +488,46 @@ async function editAssistChecks() {
     `);
     check("leaving the block draws the new table", drawn.tables === tables + 1 && drawn.empty, JSON.stringify(drawn));
 
+    // Typing changes the block's kind under the caret; the same editor carries on with the caret where the edit left it.
+    await page(`
+      const h = document.querySelector("article h2");
+      const r = h.getBoundingClientRect();
+      h.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: r.right - 2, clientY: r.top + r.height / 2 }));
+    `);
+    await waitFor("the live editor", () => page<boolean>(`return !!document.querySelector(".act .cm-content")`));
+    await settle();
+    await page(`window.e2eView = e2e.view(${JSON.stringify(live)}); return true`);
+    // h3 to h6 have no line style of their own, so only the block's element tells them apart.
+    const transitions: [string, number, string[], string][] = [
+      ["## 本次待办", 2, ["#"], "h3 ###| 本次待办"],
+      ["### 本次待办", 3, ["#"], "h4 ####| 本次待办"],
+      ["#### 本次待办", 4, ["Backspace"], "h3 ###| 本次待办"],
+      ["本次待办", 0, ["#", " "], "h1 # |本次待办"],
+      ["# 本次待办", 2, ["Backspace", "Backspace"], "p |本次待办"],
+      ["本次待办", 0, [">", " "], "quote > |本次待办"],
+      ["> 本次待办", 2, ["Backspace", "Backspace"], "p |本次待办"],
+    ];
+    for (const [from, at, keys, expected] of transitions) {
+      await page(`const v = e2e.view(${JSON.stringify(live)}); v.focus(); v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: ${JSON.stringify(from)} }, selection: { anchor: ${at} } })`);
+      await settle();
+      for (const k of keys) {
+        await e2e(k.length > 1 ? `key(${JSON.stringify(live)}, ${JSON.stringify(k)})` : `type(${JSON.stringify(live)}, ${JSON.stringify(k)})`);
+        await settle();
+      }
+      const got = await page<string>(`
+        const act = document.querySelector(".act");
+        const v = e2e.view(".act .cm-content");
+        const s = v.state.selection.main.head;
+        const kind = act.getAttribute("aria-level") ? "h" + act.getAttribute("aria-level") : act.classList.contains("quote") ? "quote" : "p";
+        const same = v === window.e2eView && v.hasFocus ? "" : " (another editor or no focus)";
+        return kind + " " + v.state.sliceDoc(0, s) + "|" + v.state.sliceDoc(s) + same;
+      `);
+      check(`${keys.join(" ")} on "${from.slice(0, at)}|${from.slice(at)}" keeps the editor and its caret`, got === expected, got);
+    }
+    await page(`const v = e2e.view(${JSON.stringify(live)}); v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: "## 本次待办" } })`);
+    await e2e(`key(${JSON.stringify(live)}, "Escape")`);
+    await settle();
+
     // 斜杠命令 in source mode: ↓ moves the selection, Esc closes the menu and keeps the "/".
     await menu("视图", "源码");
     await settle();

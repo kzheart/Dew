@@ -11,11 +11,11 @@
 .art.ff-mono{font-family:'SF Mono',Menlo,'JetBrains Mono','PingFang SC',monospace}
 .art a{color:#0A66D8}.art a:hover{color:#0850A8}
 .art kbd{font-family:'SF Mono',Menlo,'JetBrains Mono',ui-monospace,monospace}
-.art h1{font-size:2em;line-height:1.25;margin:0;letter-spacing:-.015em;font-weight:700;text-wrap:balance}
-.art h2{font-size:1.35em;line-height:1.35;margin:0;padding-top:.7em;font-weight:600}
-.art h3{font-size:1.15em;line-height:1.4;margin:0;padding-top:.5em;font-weight:600}
-.art h4,.art h5,.art h6{font-size:1em;line-height:1.5;margin:0;padding-top:.4em;font-weight:600}
-.art h5,.art h6{font-size:.92em;color:#4B4B50}
+.art h1,.art [aria-level="1"]{font-size:2em;line-height:1.25;margin:0;letter-spacing:-.015em;font-weight:700;text-wrap:balance}
+.art h2,.art [aria-level="2"]{font-size:1.35em;line-height:1.35;margin:0;padding-top:.7em;font-weight:600}
+.art h3,.art [aria-level="3"]{font-size:1.15em;line-height:1.4;margin:0;padding-top:.5em;font-weight:600}
+.art h4,.art h5,.art h6,.art [aria-level="4"],.art [aria-level="5"],.art [aria-level="6"]{font-size:1em;line-height:1.5;margin:0;padding-top:.4em;font-weight:600}
+.art h5,.art h6,.art [aria-level="5"],.art [aria-level="6"]{font-size:.92em;color:#4B4B50}
 .art p{margin:0;text-wrap:pretty}
 .art .blk{transition:opacity .5s cubic-bezier(.4,0,.2,1),filter .5s cubic-bezier(.4,0,.2,1),box-shadow .3s ease}
 .art.focus .blk{opacity:.18;filter:blur(.5px)}
@@ -98,11 +98,11 @@
 .art .list p{margin:0}
 .art .list li.task-li,.art .list li.task-item{list-style:none;margin-left:-1.5em;display:flex;gap:10px;align-items:baseline}
 .art .list li.task-li > input,.art .list li.task-item > input{transform:translateY(2px)}
-.art blockquote.quote{margin:0;padding:.1em 0 .1em 1em;border-left:3px solid rgba(0,0,0,.14);color:#4B4B50}
-.art blockquote.quote > *{margin:0}
-.art blockquote.quote > * + *{margin-top:.6em}
-.bg-paper blockquote.quote{border-color:#DFD1B5;color:#5A4B36}
-.bg-night blockquote.quote{border-color:#38383C;color:#A8A8AE}
+.art .quote{margin:0;padding:.1em 0 .1em 1em;border-left:3px solid rgba(0,0,0,.14);color:#4B4B50}
+.art .quote > *{margin:0}
+.art .quote > * + *{margin-top:.6em}
+.bg-paper .quote{border-color:#DFD1B5;color:#5A4B36}
+.bg-night .quote{border-color:#38383C;color:#A8A8AE}
 .art hr.blk{border:0;height:.5px;background:rgba(0,0,0,.14);margin:.4em 0;width:100%}
 .bg-night hr.blk{background:#38383C}
 .art .img{margin:0;text-align:center}

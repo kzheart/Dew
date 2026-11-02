@@ -1,7 +1,7 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { EditorState, Prec, StateField, type Extension } from "@codemirror/state";
 import { Decoration, drawSelection, EditorView, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
-import { useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type HTMLAttributes, type ReactNode } from "react";
 import { liveTokens, renderExtensions, tokenClasses } from "../editor/render";
 import { external } from "../editor/SourceEditor";
 import { liveSyntax } from "../editor/syntax";
@@ -77,43 +77,32 @@ function shellOf(block: Block | null): Shell {
   }
 }
 
-/** The element a text block edits in, so the editor keeps that block's typography. */
-function textShell(block: Block | null): { tag: string; className: string } {
+/**
+ * How the active element presents a text block, so the editor keeps that block's typography. It is
+ * always a div: an element of another tag would replace it as the block changes kind while typed.
+ */
+function textShell(block: Block | null): HTMLAttributes<HTMLDivElement> {
   switch (block?.kind) {
     case "heading":
-      return { tag: `h${Math.min(block.level, 6)}`, className: "" };
+      return { role: "heading", "aria-level": Math.min(block.level, 6) };
     case "callout":
-      return { tag: "div", className: `callout callout-${block.variant} lv-callout` };
+      return { className: `callout callout-${block.variant} lv-callout` };
     case "quote":
-      return { tag: "blockquote", className: "quote" };
+      return { className: "quote" };
     case "footnotes":
-      return { tag: "div", className: "fns muted" };
-    case "list":
-    case "hr":
-      return { tag: "div", className: "" };
+      return { className: "fns muted" };
     default:
-      return { tag: "p", className: "" };
+      return {};
   }
 }
 
 /** The active block of live mode: its source in a small CodeMirror, in place of the rendered block. */
 export function LiveEditor({ block, source, firstLine, caret, showLineNumbers, assist = [], tools, onChange, onExit, onCursor }: Props) {
-  const host = useRef<HTMLElement | null>(null);
+  const host = useRef<HTMLDivElement | null>(null);
   const view = useRef<EditorView | null>(null);
   const callbacks = useRef({ onChange, onExit, onCursor });
   callbacks.current = { onChange, onExit, onCursor };
   const shell = shellOf(block);
-
-  // A block can change kind while typed (a paragraph becoming a heading); the
-  // editor then moves into the new element, keeping its focus, rather than
-  // starting over.
-  const attach = useCallback((el: HTMLElement | null) => {
-    host.current = el;
-    const v = view.current;
-    if (!el || !v || v.dom.parentElement === el) return;
-    el.appendChild(v.dom);
-    v.focus();
-  }, []);
 
   useLayoutEffect(() => {
     const exit = (dir: -1 | 0 | 1) => {
@@ -175,27 +164,22 @@ export function LiveEditor({ block, source, firstLine, caret, showLineNumbers, a
     if (v && change) v.dispatch({ changes: change, annotations: external.of(true) });
   }, [source]);
 
-  if (shell === "code" && block?.kind === "code") {
-    const meta = codeMeta(block.highlight);
-    return (
-      <div className="blk act cb" data-line={firstLine}>
-        <div className="cb-head">
-          <span className="cb-lang">{codeLabel(block)}</span>
-          {meta && <span className="cb-meta">{meta}</span>}
-        </div>
-        <div className="cb-body lv" ref={attach} />
-      </div>
-    );
-  }
-  if (shell === "source") {
-    return (
-      <div className="blk act lv-source" data-line={firstLine}>
-        {tools}
-        <div className="src-box lv" ref={attach} />
-      </div>
-    );
-  }
-  const { tag: Tag, className } = textShell(block);
-  const El = Tag as "div";
-  return <El className={`blk act lv${className ? " " + className : ""}`} data-line={firstLine} ref={attach} />;
+  // The editor's element stays put while the block changes kind; moving it would drop the browser's
+  // selection, which CodeMirror then reads back as the start.
+  const meta = block?.kind === "code" && codeMeta(block.highlight);
+  const head = shell === "code" && block?.kind === "code" && (
+    <div className="cb-head">
+      <span className="cb-lang">{codeLabel(block)}</span>
+      {meta && <span className="cb-meta">{meta}</span>}
+    </div>
+  );
+  const { className, ...attrs } = shell === "text" ? textShell(block) : {};
+  const frame = shell === "code" ? "cb" : shell === "source" ? "lv-source" : `lv${className ? " " + className : ""}`;
+  return (
+    <div className={`blk act ${frame}`} data-line={firstLine} {...attrs}>
+      {head}
+      {shell === "source" && tools}
+      <div className={shell === "code" ? "cb-body lv" : shell === "source" ? "src-box lv" : undefined} ref={host} />
+    </div>
+  );
 }
