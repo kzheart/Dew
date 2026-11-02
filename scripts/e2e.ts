@@ -4,7 +4,12 @@
  * samples/版本说明.md and samples/超级代码块.md, checks what the user would
  * see and what lands on disk, and captures PNGs along the way.
  *
- *   bun scripts/e2e.ts [out-dir]
+ *   bun scripts/e2e.ts [out-dir] [--no-build] [section ...]
+ *
+ * Sections are document, code, assist, share and tabs; with none named, all
+ * of them run. Each starts its own launch on its own copies, so one can run
+ * alone: after changing the dock, `bun scripts/e2e.ts tabs`. --no-build reuses
+ * the last dist/ and dew-e2e, for reruns with no code changed in between.
  *
  * Captures go to out-dir (default ./e2e-out); exported files and the edited
  * copies of the samples go to out-dir/work.
@@ -18,8 +23,23 @@ import { classifyPaste } from "../src/assist/paste";
 import { slashCommands } from "../src/assist/slash";
 import { Automation } from "./automation";
 
+const sections: Record<string, () => Promise<void>> = {
+  document: documentChecks,
+  code: codeChecks,
+  assist: editAssistChecks,
+  share: shareTableChecks,
+  tabs: tabChecks,
+};
+const args = process.argv.slice(2);
+const noBuild = args.includes("--no-build");
+const isSection = (a: string) => Object.hasOwn(sections, a);
+const named = args.filter(isSection);
+const unknown = args.filter((a) => a.startsWith("-") && a !== "--no-build");
+if (unknown.length) throw new Error(`unknown flags ${unknown.join(" ")}; sections are ${Object.keys(sections).join(", ")}`);
+const outArg = args.find((a) => a !== "--no-build" && !isSection(a));
+
 const root = resolve(import.meta.dir, "..");
-const out = resolve(process.argv[2] ?? join(root, "e2e-out"));
+const out = resolve(outArg ?? join(root, "e2e-out"));
 const work = join(out, "work");
 const file = join(work, "版本说明.md");
 const superFile = join(work, "超级代码块.md");
@@ -48,8 +68,8 @@ await copyFile(join(root, "samples/版本说明.md"), file);
 await copyFile(join(root, "samples/超级代码块.md"), superFile);
 const original = await readFile(file, "utf8");
 
-console.log("building…");
-await $`bun run build:web`.cwd(root).quiet();
+if (!noBuild) console.log("building…");
+if (!noBuild) await $`bun run build:web`.cwd(root).quiet();
 // DEW_E2E_APP gives parallel runs (e.g. from two worktrees) their own app data.
 const appName = process.env.DEW_E2E_APP ?? "DewE2E";
 const ldflags = [
@@ -57,7 +77,8 @@ const ldflags = [
   `-X github.com/egoist/mygo.packageName=${appName}`,
   `-X github.com/egoist/mygo.packageIdentifier=com.example.dew.e2e.${appName.toLowerCase()}`,
 ].join(" ");
-await $`go build -tags e2e -ldflags ${ldflags} -o dew-e2e .`.cwd(root);
+if (!noBuild) await $`go build -tags e2e -ldflags ${ldflags} -o dew-e2e .`.cwd(root);
+else if (!existsSync(join(root, "dew-e2e"))) throw new Error("--no-build, but there is no dew-e2e to reuse");
 
 interface AppWindow {
   id: number;
@@ -100,7 +121,7 @@ interface DockFile {
 const dock = (page: Session["page"]) =>
   page<DockFile[]>(`return [...document.querySelectorAll(".dock .dk:not(.closing)")].map((d) => ({
     name: d.querySelector(".nm").textContent,
-    tip: d.querySelector(".dk-btn").title,
+    tip: d.querySelector(".dk-btn").getAttribute("aria-label"),
     tear: ["dirty", "empty"].find((s) => d.querySelector(".tear").classList.contains(s)) ?? "saved",
     current: d.querySelector(".dk-btn").getAttribute("aria-current") === "page",
     trembling: d.querySelector(".m18").classList.contains("trem"),
@@ -150,245 +171,252 @@ async function session(paths: string | string[], steps: (s: Session) => Promise<
   }
 }
 
-await session(file, async ({ page, capture, menu, text }) => {
-  const content = () => page<string>(`return await mygo.call("Doc.Content")`);
+/** The sample in each mode: typing, saving, tasks, exports, the lightbox, the share card, reloads and conflicts. */
+async function documentChecks() {
+  await session(file, async ({ page, capture, menu, text }) => {
+    const content = () => page<string>(`return await mygo.call("Doc.Content")`);
 
-  const alone = await dock(page);
-  const chrome = await page<{ title: boolean; closable: boolean }>(`return { title: !!document.querySelector(".gtitle"), closable: !!document.querySelector(".dk-x") }`);
-  check(
-    "the dock shows the window's one file with a full tear, and no title glass or close button",
-    alone.length === 1 && alone[0]!.current && alone[0]!.tip === "版本说明.md，已保存 · 与磁盘同步" && alone[0]!.tear === "saved" && !chrome.title && !chrome.closable,
-    JSON.stringify({ alone, chrome }),
-  );
-  await capture("e2e-dock");
-  singleTitleBar = await titleBar(page);
-  const inset = await page<string>(`return getComputedStyle(document.documentElement).getPropertyValue("--mygo-titlebar-inset-left")`);
-  check("the header leaves room for the traffic lights", parseFloat(inset) > 0, `inset ${inset.trim()}`);
+    const alone = await dock(page);
+    const chrome = await page<{ title: boolean; closable: boolean }>(`return { title: !!document.querySelector(".gtitle"), closable: !!document.querySelector(".dk-x") }`);
+    check(
+      "the dock shows the window's one file with a full tear, and no title glass or close button",
+      alone.length === 1 && alone[0]!.current && alone[0]!.tip === "版本说明.md，已保存 · 与磁盘同步" && alone[0]!.tear === "saved" && !chrome.title && !chrome.closable,
+      JSON.stringify({ alone, chrome }),
+    );
+    await capture("e2e-dock");
+    singleTitleBar = await titleBar(page);
+    const inset = await page<string>(`return getComputedStyle(document.documentElement).getPropertyValue("--mygo-titlebar-inset-left")`);
+    check("the header leaves room for the traffic lights", parseFloat(inset) > 0, `inset ${inset.trim()}`);
 
-  const modes: [string, string, string][] = [
-    ["实时", "live", "实时编辑"],
-    ["预览", "preview", "预览"],
-    ["源码", "edit", "源码"],
-    ["源码分栏", "split", "源码 · 分栏"],
-  ];
-  for (const [item, name, label] of modes) {
-    await menu("视图", item);
+    const modes: [string, string, string][] = [
+      ["实时", "live", "实时编辑"],
+      ["预览", "preview", "预览"],
+      ["源码", "edit", "源码"],
+      ["源码分栏", "split", "源码 · 分栏"],
+    ];
+    for (const [item, name, label] of modes) {
+      await menu("视图", item);
+      await settle();
+      const stat = await text(".stat");
+      check(`视图 › ${item} switches the mode`, stat.endsWith(label), stat);
+      await capture(`e2e-${name}`);
+    }
+
+    await page(`document.querySelector('[aria-label="排版设置"]').click()`);
     await settle();
-    const stat = await text(".stat");
-    check(`视图 › ${item} switches the mode`, stat.endsWith(label), stat);
-    await capture(`e2e-${name}`);
-  }
+    check("the Aa popover opens", await page<boolean>(`return !!document.querySelector(".pop-aa")`));
+    await capture("e2e-popover-aa");
+    await page(`document.querySelector('[aria-label="导出与分享"]').click()`);
+    await settle();
+    check("the export popover opens", await page<boolean>(`return !!document.querySelector(".pop-exp")`));
+    await capture("e2e-popover-export");
+    await page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
 
-  await page(`document.querySelector('[aria-label="排版设置"]').click()`);
-  await settle();
-  check("the Aa popover opens", await page<boolean>(`return !!document.querySelector(".pop-aa")`));
-  await capture("e2e-popover-aa");
-  await page(`document.querySelector('[aria-label="导出与分享"]').click()`);
-  await settle();
-  check("the export popover opens", await page<boolean>(`return !!document.querySelector(".pop-exp")`));
-  await capture("e2e-popover-export");
-  await page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await menu("视图", "实时");
+    await settle();
+    await page(`
+      const p = document.querySelector('article p[data-src="10"]');
+      const r = p.getBoundingClientRect();
+      p.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: r.right - 2, clientY: r.top + r.height / 2 }));
+    `);
+    await waitFor("the live editor", () => page<boolean>(`return !!document.querySelector(".act .cm-content")`));
+    const typed = "（e2e 实时输入）";
+    await page(`
+      const el = document.querySelector(".act .cm-content");
+      // CodeMirror keeps its view on the content element (what EditorView.findFromDOM reads).
+      const view = el.cmTile.root.view;
+      view.dispatch({ changes: { from: view.state.doc.length, insert: ${JSON.stringify(typed)} } });
+    `);
+    await settle();
+    check("typing in live mode reaches Doc.content()", (await content()).includes(`真正对齐。${typed}`));
+    const edited = await currentFile(page);
+    check("the tear runs low and trembles while the document is edited", edited?.tear === "dirty" && edited.trembling && edited.tip === "版本说明.md，有未保存的修改", JSON.stringify(edited));
+    await capture("e2e-live-typing");
+    await menu("文件", "保存");
+    await waitFor("the save", () => isSaved(page));
+    check("saving fills the tear and ripples a ring off it", await page<boolean>(`return document.querySelector(".dk.on .tear").classList.contains("ripple")`));
+    check("文件 › 保存 writes the typed text to disk", (await readFile(file, "utf8")).includes(`真正对齐。${typed}`));
 
-  await menu("视图", "实时");
-  await settle();
-  await page(`
-    const p = document.querySelector('article p[data-src="10"]');
-    const r = p.getBoundingClientRect();
-    p.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: r.right - 2, clientY: r.top + r.height / 2 }));
-  `);
-  await waitFor("the live editor", () => page<boolean>(`return !!document.querySelector(".act .cm-content")`));
-  const typed = "（e2e 实时输入）";
-  await page(`
-    const el = document.querySelector(".act .cm-content");
-    // CodeMirror keeps its view on the content element (what EditorView.findFromDOM reads).
-    const view = el.cmTile.root.view;
-    view.dispatch({ changes: { from: view.state.doc.length, insert: ${JSON.stringify(typed)} } });
-  `);
-  await settle();
-  check("typing in live mode reaches Doc.content()", (await content()).includes(`真正对齐。${typed}`));
-  const edited = await currentFile(page);
-  check("the tear runs low and trembles while the document is edited", edited?.tear === "dirty" && edited.trembling && edited.tip === "版本说明.md，有未保存的修改", JSON.stringify(edited));
-  await capture("e2e-live-typing");
-  await menu("文件", "保存");
-  await waitFor("the save", () => isSaved(page));
-  check("saving fills the tear and ripples a ring off it", await page<boolean>(`return document.querySelector(".dk.on .tear").classList.contains("ripple")`));
-  check("文件 › 保存 writes the typed text to disk", (await readFile(file, "utf8")).includes(`真正对齐。${typed}`));
+    await page(`document.querySelector(".act .cm-content").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await page(`document.querySelector("article .tasks li:nth-child(3) input").click()`);
+    await settle();
+    const lines = (await content()).split("\n");
+    check("toggling a task rewrites its source line", lines[18] === "- [x] PDF 导出分页保护", lines[18]);
 
-  await page(`document.querySelector(".act .cm-content").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-  await page(`document.querySelector("article .tasks li:nth-child(3) input").click()`);
-  await settle();
-  const lines = (await content()).split("\n");
-  check("toggling a task rewrites its source line", lines[18] === "- [x] PDF 导出分页保护", lines[18]);
+    await menu("文件", "导出为 PDF…");
+    const pdf = join(work, "版本说明.pdf");
+    await waitFor("the PDF", async () => existsSync(pdf) && (await Bun.file(pdf).size) > 0, 20000);
+    const head = Buffer.from(await Bun.file(pdf).slice(0, 5).arrayBuffer()).toString("latin1");
+    check("文件 › 导出为 PDF… saves a PDF", head === "%PDF-", `${head}, ${await Bun.file(pdf).size} bytes`);
 
-  await menu("文件", "导出为 PDF…");
-  const pdf = join(work, "版本说明.pdf");
-  await waitFor("the PDF", async () => existsSync(pdf) && (await Bun.file(pdf).size) > 0, 20000);
-  const head = Buffer.from(await Bun.file(pdf).slice(0, 5).arrayBuffer()).toString("latin1");
-  check("文件 › 导出为 PDF… saves a PDF", head === "%PDF-", `${head}, ${await Bun.file(pdf).size} bytes`);
+    await menu("文件", "导出为 HTML…");
+    const html = join(work, "版本说明.html");
+    await waitFor("the HTML", async () => existsSync(html) && (await Bun.file(html).size) > 0, 10000);
+    const saved = await readFile(html, "utf8");
+    check("文件 › 导出为 HTML… saves a standalone file", saved.includes("data-dew-export") && saved.includes("data:font/woff2"), `${saved.length} chars`);
 
-  await menu("文件", "导出为 HTML…");
-  const html = join(work, "版本说明.html");
-  await waitFor("the HTML", async () => existsSync(html) && (await Bun.file(html).size) > 0, 10000);
-  const saved = await readFile(html, "utf8");
-  check("文件 › 导出为 HTML… saves a standalone file", saved.includes("data-dew-export") && saved.includes("data:font/woff2"), `${saved.length} chars`);
+    await menu("视图", "预览");
+    await settle();
+    await page(`document.querySelector('[aria-label="放大查看"]').click()`);
+    await settle();
+    await page(`
+      const input = document.querySelector("#lbq");
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "src");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    `);
+    await settle();
+    check("the code lightbox opens and counts search hits", (await text(".lb-count")) === "1 / 3", await text(".lb-count"));
+    await capture("e2e-lightbox");
+    await page(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await settle();
+    check("Escape closes the lightbox", !(await page<boolean>(`return !!document.querySelector(".lb")`)));
 
-  await menu("视图", "预览");
-  await settle();
-  await page(`document.querySelector('[aria-label="放大查看"]').click()`);
-  await settle();
-  await page(`
-    const input = document.querySelector("#lbq");
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "src");
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  `);
-  await settle();
-  check("the code lightbox opens and counts search hits", (await text(".lb-count")) === "1 / 3", await text(".lb-count"));
-  await capture("e2e-lightbox");
-  await page(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-  await settle();
-  check("Escape closes the lightbox", !(await page<boolean>(`return !!document.querySelector(".lb")`)));
+    // The share card opens on the selection, and 保存… writes its PNG.
+    await page(`
+      const p = document.querySelector('article p[data-src="47"]');
+      getSelection().selectAllChildren(p);
+    `);
+    await menu("文件", "将选区生成分享卡片…");
+    await waitFor("the share card dialog", () => page<boolean>(`return !!document.querySelector(".share-save")`));
+    await page(`document.querySelector(".share-save").click()`);
+    const card = join(work, "版本说明-分享卡片.png");
+    await waitFor("the share card", async () => existsSync(card) && (await Bun.file(card).size) > 0, 10000);
+    const sig = Buffer.from(await Bun.file(card).slice(0, 8).arrayBuffer()).toString("hex");
+    check("文件 › 将选区生成分享卡片… opens the card, whose 保存… saves a PNG", sig === "89504e470d0a1a0a", `${await Bun.file(card).size} bytes`);
+    await copyFile(card, join(out, "e2e-share-card.png"));
+    await page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await settle();
 
-  // The share card opens on the selection, and 保存… writes its PNG.
-  await page(`
-    const p = document.querySelector('article p[data-src="47"]');
-    getSelection().selectAllChildren(p);
-  `);
-  await menu("文件", "将选区生成分享卡片…");
-  await waitFor("the share card dialog", () => page<boolean>(`return !!document.querySelector(".share-save")`));
-  await page(`document.querySelector(".share-save").click()`);
-  const card = join(work, "版本说明-分享卡片.png");
-  await waitFor("the share card", async () => existsSync(card) && (await Bun.file(card).size) > 0, 10000);
-  const sig = Buffer.from(await Bun.file(card).slice(0, 8).arrayBuffer()).toString("hex");
-  check("文件 › 将选区生成分享卡片… opens the card, whose 保存… saves a PNG", sig === "89504e470d0a1a0a", `${await Bun.file(card).size} bytes`);
-  await copyFile(card, join(out, "e2e-share-card.png"));
-  await page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-  await settle();
+    // Another app changes the file while the page has no unsaved edits: the page reloads it.
+    await menu("文件", "保存");
+    await waitFor("the save", () => isSaved(page));
+    await writeFile(file, (await readFile(file, "utf8")) + "\n外部修改的一行。\n");
+    const reloaded = await waitFor("the reload", async () => (await text("article")).includes("外部修改的一行")).catch(() => false);
+    const held = reloaded || { tear: (await currentFile(page))?.tear, inDoc: (await content()).includes("外部修改的一行") };
+    check("a change on disk reloads the document", reloaded, reloaded ? "" : `after 8 s the page still shows the old text: ${JSON.stringify(held)}`);
 
-  // Another app changes the file while the page has no unsaved edits: the page reloads it.
-  await menu("文件", "保存");
-  await waitFor("the save", () => isSaved(page));
-  await writeFile(file, (await readFile(file, "utf8")) + "\n外部修改的一行。\n");
-  await waitFor("the reload", async () => (await text("article")).includes("外部修改的一行"));
-  check("a change on disk reloads the document", true);
+    // With unsaved edits it is a conflict, which the title glass offers to settle.
+    await page(`document.querySelector("article .tasks li:nth-child(1) input").click()`);
+    await settle();
+    await writeFile(file, original);
+    await waitFor("the conflict", async () => (await text(".gtitle")).includes("磁盘上的文件已被其他应用修改"));
+    const buttons = await page<string>(`return [...document.querySelectorAll(".gtitle button")].map((b) => b.textContent).join("/")`);
+    check("a conflicting change offers keep-mine and revert", buttons.includes("保留我的") && buttons.includes("还原"), buttons);
+    await capture("e2e-conflict");
+    await page(`[...document.querySelectorAll(".gtitle button")].find((b) => b.textContent.includes("保留我的")).click()`);
+    await waitFor("keep mine", async () => (await isSaved(page)) && !(await page<boolean>(`return !!document.querySelector(".gtitle")`)));
+    check("保留我的 writes the page's text over the other app's and puts the title glass away", (await readFile(file, "utf8")).includes("- [ ] 分栏像素级同步滚动"));
+  });
+}
 
-  // With unsaved edits it is a conflict, which the title glass offers to settle.
-  await page(`document.querySelector("article .tasks li:nth-child(1) input").click()`);
-  await settle();
-  await writeFile(file, original);
-  await waitFor("the conflict", async () => (await text(".gtitle")).includes("磁盘上的文件已被其他应用修改"));
-  const buttons = await page<string>(`return [...document.querySelectorAll(".gtitle button")].map((b) => b.textContent).join("/")`);
-  check("a conflicting change offers keep-mine and revert", buttons.includes("保留我的") && buttons.includes("还原"), buttons);
-  await capture("e2e-conflict");
-  await page(`[...document.querySelectorAll(".gtitle button")].find((b) => b.textContent.includes("保留我的")).click()`);
-  await waitFor("keep mine", async () => (await isSaved(page)) && !(await page<boolean>(`return !!document.querySelector(".gtitle")`)));
-  check("保留我的 writes the page's text over the other app's and puts the title glass away", (await readFile(file, "utf8")).includes("- [ ] 分栏像素级同步滚动"));
-});
+/** 超级代码块.md: code blocks, diffs, diagrams and their toolbars. */
+async function codeChecks() {
+  await session(superFile, async ({ page, capture, menu }) => {
+    await menu("视图", "预览");
+    await settle();
+    // The script that finds a code block by the label in its header.
+    const block = (label: string) => `[...document.querySelectorAll("article .cb")].find((b) => b.querySelector(".cb-lang")?.textContent === ${JSON.stringify(label)})`;
+    const show = (label: string) => page(`${block(label)}.scrollIntoView({ block: "start" }); document.querySelector(".pv-scroll").scrollTop -= 80`);
 
-await session(superFile, async ({ page, capture, menu }) => {
-  await menu("视图", "预览");
-  await settle();
-  // The script that finds a code block by the label in its header.
-  const block = (label: string) => `[...document.querySelectorAll("article .cb")].find((b) => b.querySelector(".cb-lang")?.textContent === ${JSON.stringify(label)})`;
-  const show = (label: string) => page(`${block(label)}.scrollIntoView({ block: "start" }); document.querySelector(".pv-scroll").scrollTop -= 80`);
+    const diff = await page<{ add: string; del: string; numbered: boolean }>(`
+      const b = ${block("Diff")};
+      const numbers = [...b.querySelectorAll(".dl-context")].map((r) => [...r.querySelectorAll(".dl-no")].map((n) => n.textContent));
+      return { add: b.querySelector(".df-add").textContent, del: b.querySelector(".df-del").textContent, numbered: numbers.length > 0 && numbers.every((n) => n.length === 2 && n[0] && n[1]) };
+    `);
+    check("the diff counts +4 −2 and numbers its old and new lines", diff.add === "+4" && diff.del === "−2" && diff.numbered, JSON.stringify(diff));
+    await show("Diff");
+    await settle();
+    await capture("e2e-super-diff");
 
-  const diff = await page<{ add: string; del: string; numbered: boolean }>(`
-    const b = ${block("Diff")};
-    const numbers = [...b.querySelectorAll(".dl-context")].map((r) => [...r.querySelectorAll(".dl-no")].map((n) => n.textContent));
-    return { add: b.querySelector(".df-add").textContent, del: b.querySelector(".df-del").textContent, numbered: numbers.length > 0 && numbers.every((n) => n.length === 2 && n[0] && n[1]) };
-  `);
-  check("the diff counts +4 −2 and numbers its old and new lines", diff.add === "+4" && diff.del === "−2" && diff.numbered, JSON.stringify(diff));
-  await show("Diff");
-  await settle();
-  await capture("e2e-super-diff");
+    const fold = () => page<{ rows: number; pill: string; meta: string; top: number }>(`
+      const b = ${block("Python")};
+      return { rows: b.querySelectorAll(".cl").length, pill: b.querySelector(".cb-pill")?.textContent ?? "", meta: b.querySelector(".cb-meta")?.textContent ?? "", top: Math.round(b.getBoundingClientRect().top) };
+    `);
+    const folded = await fold();
+    check("a long block opens on 8 of its 46 lines", folded.rows === 8 && folded.pill === "展开剩余 38 行" && folded.meta.includes("共 46 行"), JSON.stringify(folded));
+    await show("Python");
+    await settle();
+    await capture("e2e-super-folded");
+    await page(`${block("Python")}.querySelector(".cb-pill").click()`);
+    await settle();
+    const expanded = await fold();
+    check("展开剩余 shows every line", expanded.rows === 46 && expanded.pill === "收起", JSON.stringify(expanded));
+    await page(`document.querySelector(".pv-scroll").scrollTop += 600`);
+    await settle();
+    await capture("e2e-super-expanded");
+    await page(`${block("Python")}.querySelector(".cb-pill").click()`);
+    await Bun.sleep(900);
+    const collapsed = await fold();
+    check("收起 folds the block and brings its header back into view", collapsed.rows === 8 && collapsed.top >= 0, JSON.stringify(collapsed));
 
-  const fold = () => page<{ rows: number; pill: string; meta: string; top: number }>(`
-    const b = ${block("Python")};
-    return { rows: b.querySelectorAll(".cl").length, pill: b.querySelector(".cb-pill")?.textContent ?? "", meta: b.querySelector(".cb-meta")?.textContent ?? "", top: Math.round(b.getBoundingClientRect().top) };
-  `);
-  const folded = await fold();
-  check("a long block opens on 8 of its 46 lines", folded.rows === 8 && folded.pill === "展开剩余 38 行" && folded.meta.includes("共 46 行"), JSON.stringify(folded));
-  await show("Python");
-  await settle();
-  await capture("e2e-super-folded");
-  await page(`${block("Python")}.querySelector(".cb-pill").click()`);
-  await settle();
-  const expanded = await fold();
-  check("展开剩余 shows every line", expanded.rows === 46 && expanded.pill === "收起", JSON.stringify(expanded));
-  await page(`document.querySelector(".pv-scroll").scrollTop += 600`);
-  await settle();
-  await capture("e2e-super-expanded");
-  await page(`${block("Python")}.querySelector(".cb-pill").click()`);
-  await Bun.sleep(900);
-  const collapsed = await fold();
-  check("收起 folds the block and brings its header back into view", collapsed.rows === 8 && collapsed.top >= 0, JSON.stringify(collapsed));
+    const chart = (label: string) => page<string>(`
+      const b = ${block(label)};
+      return b.querySelector(".dia-svg svg") ? "svg" : b.querySelector(".dia-err") ? "error: " + b.querySelector(".dia-err pre").textContent : "";
+    `);
+    for (const label of ["Mermaid", "Vega-Lite"]) {
+      const drawn = await waitFor(`the ${label} chart`, () => chart(label), 20000).catch(String);
+      check(`a ${label} fence is drawn as an SVG chart`, drawn === "svg", drawn);
+    }
+    const puml = await waitFor("the PlantUML chart", () => chart("PlantUML"), 25000).catch(String);
+    check("a PlantUML fence is drawn by plantuml.com, or says why it is not", puml === "svg" || puml.startsWith("error: "), puml === "svg" ? "rendered" : puml);
+    await show("Mermaid");
+    await settle();
+    await capture("e2e-super-mermaid");
+    await show("Vega-Lite");
+    await settle();
+    await capture("e2e-super-vega-plantuml");
 
-  const chart = (label: string) => page<string>(`
-    const b = ${block(label)};
-    return b.querySelector(".dia-svg svg") ? "svg" : b.querySelector(".dia-err") ? "error: " + b.querySelector(".dia-err pre").textContent : "";
-  `);
-  for (const label of ["Mermaid", "Vega-Lite"]) {
-    const drawn = await waitFor(`the ${label} chart`, () => chart(label), 20000).catch(String);
-    check(`a ${label} fence is drawn as an SVG chart`, drawn === "svg", drawn);
-  }
-  const puml = await waitFor("the PlantUML chart", () => chart("PlantUML"), 25000).catch(String);
-  check("a PlantUML fence is drawn by plantuml.com, or says why it is not", puml === "svg" || puml.startsWith("error: "), puml === "svg" ? "rendered" : puml);
-  await show("Mermaid");
-  await settle();
-  await capture("e2e-super-mermaid");
-  await show("Vega-Lite");
-  await settle();
-  await capture("e2e-super-vega-plantuml");
+    const view = () => page<{ svg: boolean; rows: number }>(`const b = ${block("Mermaid")}; return { svg: !!b.querySelector(".dia-svg svg"), rows: b.querySelectorAll(".cl").length }`);
+    const toggle = (to: string) => page(`[...${block("Mermaid")}.querySelectorAll(".cb-seg button")].find((x) => x.textContent === ${JSON.stringify(to)}).click()`);
+    await toggle("源码");
+    await settle();
+    const source = await view();
+    await toggle("图表");
+    await settle();
+    const back = await view();
+    check("图表 / 源码 switches between the chart and its source", !source.svg && source.rows === 8 && back.svg && back.rows === 0, JSON.stringify({ source, back }));
 
-  const view = () => page<{ svg: boolean; rows: number }>(`const b = ${block("Mermaid")}; return { svg: !!b.querySelector(".dia-svg svg"), rows: b.querySelectorAll(".cl").length }`);
-  const toggle = (to: string) => page(`[...${block("Mermaid")}.querySelectorAll(".cb-seg button")].find((x) => x.textContent === ${JSON.stringify(to)}).click()`);
-  await toggle("源码");
-  await settle();
-  const source = await view();
-  await toggle("图表");
-  await settle();
-  const back = await view();
-  check("图表 / 源码 switches between the chart and its source", !source.svg && source.rows === 8 && back.svg && back.rows === 0, JSON.stringify({ source, back }));
+    await page(`[...${block("Mermaid")}.querySelectorAll(".cb-btn")].find((x) => x.textContent.includes("导出 SVG")).click()`);
+    const svgFile = join(work, "超级代码块-mermaid.svg");
+    await waitFor("the SVG", async () => existsSync(svgFile) && (await Bun.file(svgFile).size) > 0, 10000);
+    const svgHead = (await readFile(svgFile, "utf8")).slice(0, 40);
+    check("导出 SVG saves the chart", svgHead.startsWith("<svg") || svgHead.startsWith("<?xml"), `${svgHead}…, ${await Bun.file(svgFile).size} bytes`);
 
-  await page(`[...${block("Mermaid")}.querySelectorAll(".cb-btn")].find((x) => x.textContent.includes("导出 SVG")).click()`);
-  const svgFile = join(work, "超级代码块-mermaid.svg");
-  await waitFor("the SVG", async () => existsSync(svgFile) && (await Bun.file(svgFile).size) > 0, 10000);
-  const svgHead = (await readFile(svgFile, "utf8")).slice(0, 40);
-  check("导出 SVG saves the chart", svgHead.startsWith("<svg") || svgHead.startsWith("<?xml"), `${svgHead}…, ${await Bun.file(svgFile).size} bytes`);
+    await page(`document.querySelector(".tbl-zoom").click()`);
+    await settle();
+    await page(`
+      const input = document.querySelector("#lbq");
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "预览");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    `);
+    await settle();
+    await page(`document.querySelector("#lbq").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))`);
+    await settle();
+    const lightbox = await page<{ label: string; meta: string; count: string; marks: number }>(`return {
+      label: document.querySelector(".lb")?.getAttribute("aria-label") ?? "",
+      meta: document.querySelector(".lb-title")?.textContent ?? "",
+      count: document.querySelector(".lb-count")?.textContent ?? "",
+      marks: document.querySelectorAll(".lb-tbl mark").length,
+    }`);
+    check("the table lightbox counts its search hits and steps through them", lightbox.label === "表格放大查看" && lightbox.meta.includes("4 列 × 8 行") && lightbox.count === "2 / 5" && lightbox.marks === 5, JSON.stringify(lightbox));
+    await capture("e2e-super-table-lightbox");
+    await page(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await settle();
+    const closed = await page<{ open: boolean; focus: string }>(`return { open: !!document.querySelector(".lb"), focus: document.activeElement?.className ?? "" }`);
+    check("Escape closes the table lightbox and returns focus to its button", !closed.open && closed.focus.includes("tbl-zoom"), JSON.stringify(closed));
 
-  await page(`document.querySelector(".tbl-zoom").click()`);
-  await settle();
-  await page(`
-    const input = document.querySelector("#lbq");
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "预览");
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  `);
-  await settle();
-  await page(`document.querySelector("#lbq").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))`);
-  await settle();
-  const lightbox = await page<{ label: string; meta: string; count: string; marks: number }>(`return {
-    label: document.querySelector(".lb")?.getAttribute("aria-label") ?? "",
-    meta: document.querySelector(".lb-title")?.textContent ?? "",
-    count: document.querySelector(".lb-count")?.textContent ?? "",
-    marks: document.querySelectorAll(".lb-tbl mark").length,
-  }`);
-  check("the table lightbox counts its search hits and steps through them", lightbox.label === "表格放大查看" && lightbox.meta.includes("4 列 × 8 行") && lightbox.count === "2 / 5" && lightbox.marks === 5, JSON.stringify(lightbox));
-  await capture("e2e-super-table-lightbox");
-  await page(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-  await settle();
-  const closed = await page<{ open: boolean; focus: string }>(`return { open: !!document.querySelector(".lb"), focus: document.activeElement?.className ?? "" }`);
-  check("Escape closes the table lightbox and returns focus to its button", !closed.open && closed.focus.includes("tbl-zoom"), JSON.stringify(closed));
-
-  await menu("文件", "导出为 PDF…");
-  const pdf = join(work, "超级代码块.pdf");
-  await waitFor("the PDF", async () => existsSync(pdf) && (await Bun.file(pdf).size) > 0, 40000);
-  await Bun.sleep(500);
-  // pdftotext spells some CJK characters as Kangxi radicals (⽂ for 文), which NFKC folds back.
-  const printed = (await $`pdftotext ${pdf} -`.text()).normalize("NFKC");
-  // Drawn charts print their labels; a chart that fell back to its source would print the fence's code.
-  const drawn = printed.includes("打开 .md 文件") && printed.includes("模式") && !printed.includes("flowchart TD") && !printed.includes("$schema");
-  check("the PDF export prints the charts, not their source", drawn, `${await Bun.file(pdf).size} bytes${printed.includes("@startuml") ? ", PlantUML as source" : ""}`);
-  await $`pdftoppm -r 60 -png ${pdf} ${join(out, "e2e-super-pdf")}`;
-});
+    await menu("文件", "导出为 PDF…");
+    const pdf = join(work, "超级代码块.pdf");
+    await waitFor("the PDF", async () => existsSync(pdf) && (await Bun.file(pdf).size) > 0, 40000);
+    await Bun.sleep(500);
+    // pdftotext spells some CJK characters as Kangxi radicals (⽂ for 文), which NFKC folds back.
+    const printed = (await $`pdftotext ${pdf} -`.text()).normalize("NFKC");
+    // Drawn charts print their labels; a chart that fell back to its source would print the fence's code.
+    const drawn = printed.includes("打开 .md 文件") && printed.includes("模式") && !printed.includes("flowchart TD") && !printed.includes("$schema");
+    check("the PDF export prints the charts, not their source", drawn, `${await Bun.file(pdf).size} bytes${printed.includes("@startuml") ? ", PlantUML as source" : ""}`);
+    await $`pdftoppm -r 60 -png ${pdf} ${join(out, "e2e-super-pdf")}`;
+  });
+}
 
 /**
  * 斜杠命令, 成对符号包裹 and 智能剪贴板 on another copy of 版本说明.md. Typing
@@ -519,8 +547,9 @@ async function editAssistChecks() {
         const v = e2e.view(".act .cm-content");
         const s = v.state.selection.main.head;
         const kind = act.getAttribute("aria-level") ? "h" + act.getAttribute("aria-level") : act.classList.contains("quote") ? "quote" : "p";
-        const same = v === window.e2eView && v.hasFocus ? "" : " (another editor or no focus)";
-        return kind + " " + v.state.sliceDoc(0, s) + "|" + v.state.sliceDoc(s) + same;
+        // Focus within the page: v.hasFocus also needs the window to be the system's key window.
+        const notes = (v === window.e2eView ? "" : " (another editor)") + (v.root.activeElement === v.contentDOM ? "" : " (not focused)");
+        return kind + " " + v.state.sliceDoc(0, s) + "|" + v.state.sliceDoc(s) + notes;
       `);
       check(`${keys.join(" ")} on "${from.slice(0, at)}|${from.slice(at)}" keeps the editor and its caret`, got === expected, got);
     }
@@ -655,11 +684,7 @@ async function editAssistChecks() {
   });
 }
 
-await editAssistChecks();
-
-await shareTableChecks();
-
-await tabChecks();
+for (const name of named.length ? named : Object.keys(sections)) await sections[name]!();
 
 /** Live mode's table controls, the share card dialog and its clipboard image, and the PDF's page protection. */
 async function shareTableChecks() {
@@ -840,6 +865,8 @@ async function tabChecks() {
   const first = join(dir, "版本说明.md");
   await copyFile(join(root, "samples/版本说明.md"), first);
   await copyFile(join(root, "samples/超级代码块.md"), join(dir, "超级代码块.md"));
+  // Run alone, this section measures the single window that tabs are compared with itself.
+  if (!singleTitleBar) await session(first, async ({ page }) => void (singleTitleBar = await titleBar(page)));
 
   await session([first, join(dir, "超级代码块.md")], async (s) => {
     const shown = async () => {
@@ -847,12 +874,13 @@ async function tabChecks() {
       for (const w of await s.windows()) if ((await s.at(w.id).page<string>("return document.visibilityState")) === "visible") ids.push(w.id);
       return ids;
     };
-    const front = async () => {
-      const ids = await shown();
-      const win = (await s.windows()).find((w) => w.id === ids[0]);
-      if (ids.length !== 1 || !win) throw new Error(`${ids.length} pages are shown`);
-      return { win, s: s.at(win.id) };
-    };
+    // While a tab switches, no page or two may be shown for a moment.
+    const front = () =>
+      waitFor("exactly one page shown", async () => {
+        const ids = await shown();
+        const win = (await s.windows()).find((w) => w.id === ids[0]);
+        return ids.length === 1 && win && { win, s: s.at(win.id) };
+      });
     const docks = async () => Promise.all((await s.windows()).map(async (win) => ({ win, files: await dock(s.at(win.id).page) })));
     const summary = (ds: Awaited<ReturnType<typeof docks>>) => ds.map(({ win, files }) => `${win.title}: ${files.map((f) => `${f.current ? "*" : ""}${f.name}(${f.tear})`).join(" ")}`).join(" | ");
     const settled = <T>(what: string, probe: () => Promise<T | null | undefined | false>) => waitFor(what, probe).catch(() => null);
@@ -876,18 +904,39 @@ async function tabChecks() {
 
     let top = await front();
     await top.s.capture("e2e-tabs-dock");
-    const nameWidths = () => top.s.page<number[]>(`return [...document.querySelectorAll(".dk:not(.on) .nm")].map((n) => n.getBoundingClientRect().width)`);
-    const before = await nameWidths();
-    // :hover can't be set from a script, so the dock gets a class that the :hover rules are copied to.
+    const hoverState = () =>
+      top.s.page<{ tip: string; opacity: number; dock: number; plus: number }>(`
+        const tip = document.querySelector(".dk:not(.on) .dk-tip");
+        return {
+          tip: tip.textContent,
+          opacity: Number(getComputedStyle(tip).opacity),
+          dock: document.querySelector(".dock").getBoundingClientRect().width,
+          plus: document.querySelector('.dock [aria-label="新建文件"]').getBoundingClientRect().left,
+        };
+      `);
+    // The dock unfolds after the window opens, and again as the other tabs report in; measure it once it has held still for a second.
+    const widths: number[] = [];
+    const before = await waitFor("the dock to settle", async () => {
+      const h = await hoverState();
+      widths.push(h.dock);
+      await Bun.sleep(250);
+      return widths.length >= 5 && widths.slice(-5).every((w) => w === h.dock) && h;
+    }, 15000);
+    // :hover can't be set from a script, so the drop gets a class that the :hover rules are copied to.
     await top.s.page(`
-      for (const sheet of document.styleSheets) for (const r of [...sheet.cssRules]) if (r.selectorText?.includes(".dock:hover")) sheet.insertRule(r.cssText.replaceAll(".dock:hover", ".dock.e2e-hover"), sheet.cssRules.length);
-      document.querySelector(".dock").classList.add("e2e-hover");
+      for (const sheet of document.styleSheets) for (const r of [...sheet.cssRules]) if (r.selectorText?.includes(".dk-btn:hover")) sheet.insertRule(r.cssText.replaceAll(".dk-btn:hover", ".dk-btn.e2e-hover"), sheet.cssRules.length);
+      document.querySelector(".dk:not(.on) .dk-btn").classList.add("e2e-hover");
     `);
     await Bun.sleep(1000);
-    const hovered = await nameWidths();
-    check("the other files' names show only while the dock is hovered", before.length === 1 && before[0] === 0 && hovered[0]! > 20, JSON.stringify({ before, hovered }));
+    const hovered = await hoverState();
+    const other = (await dock(top.s.page)).find((f) => !f.current)!.name;
+    check(
+      "hovering a background file's drop floats its name above it, and nothing in the dock moves",
+      before.opacity === 0 && hovered.opacity === 1 && hovered.tip === other && hovered.dock === before.dock && hovered.plus === before.plus,
+      JSON.stringify({ before, hovered }),
+    );
     await top.s.capture("e2e-tabs-dock-hover");
-    await top.s.page(`document.querySelector(".dock").classList.remove("e2e-hover")`);
+    await top.s.page(`document.querySelector(".dk:not(.on) .dk-btn").classList.remove("e2e-hover")`);
 
     const was = top.win.id;
     await top.s.page(`document.querySelector(".dk:not(.on) .dk-btn").click()`);
@@ -977,12 +1026,19 @@ async function tabChecks() {
     await Bun.sleep(400);
     check("Escape puts the light table away", !(await fresh.page<boolean>(`return !!document.querySelector(".lt") || document.querySelector(".app").classList.contains("lt-on")`)));
 
+    // An untitled file with text asks to be saved instead of closing; its text says what wrote it.
+    const untitledText = await fresh.page<string>(`return await mygo.call("Doc.Content")`);
     await fresh.page(`document.querySelector(".dk.on .dk-x").click()`);
     const closed = await settled("the untitled file to close", async () => {
       const ds = await docks();
       return ds.length === 2 && ds.every(({ files }) => files.length === 2 && files.every((f) => f.tear === "saved")) && ds;
     });
-    check("the current file's ✕ in the dock closes it, and every dock drops it", !!closed && (await shown()).length === 1, summary(closed || (await docks())));
+    const shownAfter = await settled("one page shown", async () => (await shown()).length === 1);
+    check(
+      "the current file's ✕ in the dock closes it, and every dock drops it",
+      !!closed && !!shownAfter,
+      closed ? summary(closed) : `${summary(await docks())}; untitled text ${JSON.stringify(untitledText)}`,
+    );
 
     // Dragging a page onto the light table's red zone closes its file.
     top = await front();
