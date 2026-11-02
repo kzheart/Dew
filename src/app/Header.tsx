@@ -70,7 +70,7 @@ export function Header(p: Props) {
   return (
     <header className="bar">
       <div className="bar-l">
-        {status.kind === "conflict" ? (
+        {status?.conflict ? (
           <div className="glass gtitle conflict hide-sm">
             <span className="gt-text">
               <b>{p.doc.name}</b>
@@ -79,10 +79,10 @@ export function Header(p: Props) {
             <button className="gt-act" onClick={p.onRevert} title="丢弃更改，读取磁盘上的版本">还原</button>
             <button className="gt-act primary" onClick={p.onKeepMine} title="用当前内容覆盖磁盘上的文件">保留我的</button>
           </div>
-        ) : (
+        ) : status && (
           <div className="glass gtitle hide-sm" title={p.doc.path || p.doc.name}>
             <b>{p.doc.name}</b>
-            <span className={status.warn ? "warn" : undefined}>{status.text}</span>
+            <span className="warn">{status.text}</span>
           </div>
         )}
       </div>

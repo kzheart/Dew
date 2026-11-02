@@ -59,21 +59,62 @@ const ldflags = [
 ].join(" ");
 await $`go build -tags e2e -ldflags ${ldflags} -o dew-e2e .`.cwd(root);
 
+interface AppWindow {
+  id: number;
+  title: string;
+  bounds: { x: number; y: number; width: number; height: number };
+}
+
 interface Session {
   page<T = any>(script: string): Promise<T>;
   capture(name: string): Promise<void>;
   menu(...path: string[]): Promise<unknown>;
   text(selector: string): Promise<string>;
+  /** The same, for another window of the app. */
+  at(win: number): Session;
+  windows(): Promise<AppWindow[]>;
 }
 
 const settle = () => Bun.sleep(450);
 
-/** Opens path in a fresh launch of the app, runs steps against its window, and quits it. */
-async function session(path: string, steps: (s: Session) => Promise<void>) {
+/** Where the native title bar puts the close button, and how much of the window it leaves (TabsProbe in e2e_tabs_darwin.go). */
+interface TitleBar {
+  closeX: number;
+  closeY: number;
+  contentHeight: number;
+  tabBarVisible: boolean;
+  selected: boolean;
+}
+const titleBar = (page: Session["page"]) => page<TitleBar>(`return await mygo.call("TabsProbe.TitleBar", mygo.windowId)`);
+let singleTitleBar: TitleBar | undefined;
+
+interface DockFile {
+  name: string;
+  tip: string;
+  tear: "saved" | "dirty" | "empty";
+  current: boolean;
+  trembling: boolean;
+}
+
+/** The files a page's dock shows, but those fading out. */
+const dock = (page: Session["page"]) =>
+  page<DockFile[]>(`return [...document.querySelectorAll(".dock .dk:not(.closing)")].map((d) => ({
+    name: d.querySelector(".nm").textContent,
+    tip: d.querySelector(".dk-btn").title,
+    tear: ["dirty", "empty"].find((s) => d.querySelector(".tear").classList.contains(s)) ?? "saved",
+    current: d.querySelector(".dk-btn").getAttribute("aria-current") === "page",
+    trembling: d.querySelector(".m18").classList.contains("trem"),
+  }))`);
+const currentFile = async (page: Session["page"]) => (await dock(page)).find((f) => f.current);
+const isSaved = async (page: Session["page"]) => (await currentFile(page))?.tear === "saved";
+
+/** Opens paths in a fresh launch of the app, runs steps against the first one's window, and quits it. */
+async function session(paths: string | string[], steps: (s: Session) => Promise<void>) {
+  const files = [paths].flat();
   // Its own settings, reset, so every run starts in the default mode.
   await rm(join(homedir(), "Library/Application Support", appName), { recursive: true, force: true });
   await rm(socket, { force: true });
-  const proc = Bun.spawn([join(root, "dew-e2e"), path], {
+  const proc = Bun.spawn([join(root, "dew-e2e"), ...files], {
     env: { ...process.env, MYGO_AUTOMATION: socket, DEW_E2E_SAVE_DIR: work },
     stdout: "inherit",
     stderr: "inherit",
@@ -81,21 +122,26 @@ async function session(path: string, steps: (s: Session) => Promise<void>) {
   let app: Automation | undefined;
   try {
     app = await Automation.connect(socket);
-    const { windows } = await waitFor("a window", async () => {
-      const r = await app!.request<{ windows: { id: number; title: string }[] }>("windows");
-      return r.windows.length ? r : null;
+    const windows = async () => (await app!.request<{ windows: AppWindow[] }>("windows")).windows;
+    const all = await waitFor("the windows", async () => {
+      const ws = await windows();
+      return ws.length >= files.length ? ws : null;
     });
-    const win = windows[0]!.id;
-    const page = <T = any>(script: string) => app!.eval<T>(script, win);
-    await waitFor("the page", () => page<boolean>(`return !!document.querySelector(".stat")`));
-    await steps({
-      page,
-      capture: (name) => app!.capture(join(out, `${name}.png`), win),
-      menu: (...path) => app!.request("menu", { window: win, path }),
-      text: (selector) => page<string>(`return document.querySelector(${JSON.stringify(selector)})?.textContent ?? ""`),
-    });
+    const at = (win: number): Session => {
+      const page = <T = any>(script: string) => app!.eval<T>(script, win);
+      return {
+        page,
+        capture: (name) => app!.capture(join(out, `${name}.png`), win),
+        menu: (...path) => app!.request("menu", { window: win, path }),
+        text: (selector) => page<string>(`return document.querySelector(${JSON.stringify(selector)})?.textContent ?? ""`),
+        at,
+        windows,
+      };
+    };
+    for (const w of all) await waitFor("the page", () => at(w.id).page<boolean>(`return !!document.querySelector(".stat")`));
+    await steps(at(all[0]!.id));
   } catch (err) {
-    check(`the run on ${basename(path)} finished`, false, String(err));
+    check(`the run on ${files.map((f) => basename(f)).join(", ")} finished`, false, String(err));
   } finally {
     app?.close();
     proc.kill();
@@ -107,7 +153,15 @@ async function session(path: string, steps: (s: Session) => Promise<void>) {
 await session(file, async ({ page, capture, menu, text }) => {
   const content = () => page<string>(`return await mygo.call("Doc.Content")`);
 
-  check("the window shows the file's name and state", (await text(".gtitle")).includes("版本说明.md") && (await text(".gtitle")).includes("已保存 · 与磁盘同步"), await text(".gtitle"));
+  const alone = await dock(page);
+  const chrome = await page<{ title: boolean; closable: boolean }>(`return { title: !!document.querySelector(".gtitle"), closable: !!document.querySelector(".dk-x") }`);
+  check(
+    "the dock shows the window's one file with a full tear, and no title glass or close button",
+    alone.length === 1 && alone[0]!.current && alone[0]!.tip === "版本说明.md，已保存 · 与磁盘同步" && alone[0]!.tear === "saved" && !chrome.title && !chrome.closable,
+    JSON.stringify({ alone, chrome }),
+  );
+  await capture("e2e-dock");
+  singleTitleBar = await titleBar(page);
   const inset = await page<string>(`return getComputedStyle(document.documentElement).getPropertyValue("--mygo-titlebar-inset-left")`);
   check("the header leaves room for the traffic lights", parseFloat(inset) > 0, `inset ${inset.trim()}`);
 
@@ -152,10 +206,12 @@ await session(file, async ({ page, capture, menu, text }) => {
   `);
   await settle();
   check("typing in live mode reaches Doc.content()", (await content()).includes(`真正对齐。${typed}`));
-  check("the title says the document is edited", (await text(".gtitle")).includes("已编辑"), await text(".gtitle"));
+  const edited = await currentFile(page);
+  check("the tear runs low and trembles while the document is edited", edited?.tear === "dirty" && edited.trembling && edited.tip === "版本说明.md，有未保存的修改", JSON.stringify(edited));
   await capture("e2e-live-typing");
   await menu("文件", "保存");
-  await waitFor("the save", async () => (await text(".gtitle")).includes("已保存"));
+  await waitFor("the save", () => isSaved(page));
+  check("saving fills the tear and ripples a ring off it", await page<boolean>(`return document.querySelector(".dk.on .tear").classList.contains("ripple")`));
   check("文件 › 保存 writes the typed text to disk", (await readFile(file, "utf8")).includes(`真正对齐。${typed}`));
 
   await page(`document.querySelector(".act .cm-content").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
@@ -210,7 +266,7 @@ await session(file, async ({ page, capture, menu, text }) => {
 
   // Another app changes the file while the page has no unsaved edits: the page reloads it.
   await menu("文件", "保存");
-  await waitFor("the save", async () => (await text(".gtitle")).includes("已保存"));
+  await waitFor("the save", () => isSaved(page));
   await writeFile(file, (await readFile(file, "utf8")) + "\n外部修改的一行。\n");
   await waitFor("the reload", async () => (await text("article")).includes("外部修改的一行"));
   check("a change on disk reloads the document", true);
@@ -224,8 +280,8 @@ await session(file, async ({ page, capture, menu, text }) => {
   check("a conflicting change offers keep-mine and revert", buttons.includes("保留我的") && buttons.includes("还原"), buttons);
   await capture("e2e-conflict");
   await page(`[...document.querySelectorAll(".gtitle button")].find((b) => b.textContent.includes("保留我的")).click()`);
-  await waitFor("keep mine", async () => (await text(".gtitle")).includes("已保存"));
-  check("保留我的 writes the page's text over the other app's", (await readFile(file, "utf8")).includes("- [ ] 分栏像素级同步滚动"));
+  await waitFor("keep mine", async () => (await isSaved(page)) && !(await page<boolean>(`return !!document.querySelector(".gtitle")`)));
+  check("保留我的 writes the page's text over the other app's and puts the title glass away", (await readFile(file, "utf8")).includes("- [ ] 分栏像素级同步滚动"));
 });
 
 await session(superFile, async ({ page, capture, menu }) => {
@@ -549,7 +605,7 @@ async function editAssistChecks() {
     await capture("edit-e2e-image-preview");
 
     await menu("文件", "保存");
-    await waitFor("the save", async () => (await page<string>(`return document.querySelector(".gtitle").textContent`)).includes("已保存"));
+    await waitFor("the save", () => isSaved(page));
     await menu("文件", "导出为 PDF…");
     const pdf = join(work, "辅助编辑.pdf");
     await waitFor("the PDF", async () => existsSync(pdf) && (await Bun.file(pdf).size) > 0, 20000);
@@ -562,6 +618,8 @@ async function editAssistChecks() {
 await editAssistChecks();
 
 await shareTableChecks();
+
+await tabChecks();
 
 /** Live mode's table controls, the share card dialog and its clipboard image, and the PDF's page protection. */
 async function shareTableChecks() {
@@ -662,7 +720,7 @@ async function shareTableChecks() {
     await capture("e2e-share-watermark");
     await page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
     await menu("文件", "保存");
-    await waitFor("the save", async () => (await text(".gtitle")).includes("已保存"));
+    await waitFor("the save", () => isSaved(page));
   });
 
   const exportPdf = async (menu: Session["menu"], pdf: string) => {
@@ -728,6 +786,193 @@ async function shareTableChecks() {
     const whole = at.every((u) => u.pages[0]! > 0 && u.pages.every((p) => p === u.pages[0]));
     check("code blocks, tables and charts that fit a page are not cut, and 图表代码块 shares its chart's page", whole, at.map((u) => `${u.name} p${[...new Set(u.pages)].join("/")}`).join(", "));
     await $`pdftoppm -r 50 -png ${pdf} ${join(out, "e2e-guard-super")}`;
+  });
+}
+
+/**
+ * Two files opened together become tabs of one window with the native tab
+ * bar hidden; each page's dock shows the group, switches files, and sees
+ * edits, saves, new files and closed ones; the light table lays them out.
+ */
+async function tabChecks() {
+  const dir = join(work, "tabs");
+  await mkdir(dir, { recursive: true });
+  const first = join(dir, "版本说明.md");
+  await copyFile(join(root, "samples/版本说明.md"), first);
+  await copyFile(join(root, "samples/超级代码块.md"), join(dir, "超级代码块.md"));
+
+  await session([first, join(dir, "超级代码块.md")], async (s) => {
+    const shown = async () => {
+      const ids: number[] = [];
+      for (const w of await s.windows()) if ((await s.at(w.id).page<string>("return document.visibilityState")) === "visible") ids.push(w.id);
+      return ids;
+    };
+    const front = async () => {
+      const ids = await shown();
+      const win = (await s.windows()).find((w) => w.id === ids[0]);
+      if (ids.length !== 1 || !win) throw new Error(`${ids.length} pages are shown`);
+      return { win, s: s.at(win.id) };
+    };
+    const docks = async () => Promise.all((await s.windows()).map(async (win) => ({ win, files: await dock(s.at(win.id).page) })));
+    const summary = (ds: Awaited<ReturnType<typeof docks>>) => ds.map(({ win, files }) => `${win.title}: ${files.map((f) => `${f.current ? "*" : ""}${f.name}(${f.tear})`).join(" ")}`).join(" | ");
+    const settled = <T>(what: string, probe: () => Promise<T | null | undefined | false>) => waitFor(what, probe).catch(() => null);
+    const bars = async () => Promise.all((await s.windows()).map((w) => titleBar(s.at(w.id).page)));
+    const asSingle = (t: TitleBar) => !!singleTitleBar && t.closeX === singleTitleBar.closeX && t.closeY === singleTitleBar.closeY && t.contentHeight === singleTitleBar.contentHeight;
+    const checkTitleBars = async (when: string) => {
+      const b = await bars();
+      check(`${when}, the tab bar stays hidden and the traffic lights sit where a single window has them`, b.every(asSingle) && b.filter((t) => t.selected).length === 1, JSON.stringify({ single: singleTitleBar, tabs: b }));
+    };
+
+    const opened = await s.windows();
+    const sameBounds = opened.every((w) => JSON.stringify(w.bounds) === JSON.stringify(opened[0]!.bounds));
+    check("two files open as tabs of one window: the same bounds, one page shown", opened.length === 2 && sameBounds && (await shown()).length === 1, JSON.stringify({ bounds: opened.map((w) => w.bounds), shown: await shown() }));
+    await checkTitleBars("with two files");
+    const listed = await docks();
+    check(
+      "each page's dock lists both files, its own as the current one",
+      listed.every(({ win, files }) => files.map((f) => f.name).join("/") === "版本说明.md/超级代码块.md" && files.filter((f) => f.current).map((f) => f.name).join() === win.title && files.every((f) => f.tear === "saved")),
+      summary(listed),
+    );
+
+    let top = await front();
+    await top.s.capture("e2e-tabs-dock");
+    const nameWidths = () => top.s.page<number[]>(`return [...document.querySelectorAll(".dk:not(.on) .nm")].map((n) => n.getBoundingClientRect().width)`);
+    const before = await nameWidths();
+    // :hover can't be set from a script, so the dock gets a class that the :hover rules are copied to.
+    await top.s.page(`
+      for (const sheet of document.styleSheets) for (const r of [...sheet.cssRules]) if (r.selectorText?.includes(".dock:hover")) sheet.insertRule(r.cssText.replaceAll(".dock:hover", ".dock.e2e-hover"), sheet.cssRules.length);
+      document.querySelector(".dock").classList.add("e2e-hover");
+    `);
+    await Bun.sleep(1000);
+    const hovered = await nameWidths();
+    check("the other files' names show only while the dock is hovered", before.length === 1 && before[0] === 0 && hovered[0]! > 20, JSON.stringify({ before, hovered }));
+    await top.s.capture("e2e-tabs-dock-hover");
+    await top.s.page(`document.querySelector(".dock").classList.remove("e2e-hover")`);
+
+    const was = top.win.id;
+    await top.s.page(`document.querySelector(".dk:not(.on) .dk-btn").click()`);
+    const flipped = await settled("the other file", async () => {
+      const ids = await shown();
+      return ids.length === 1 && ids[0] !== was;
+    });
+    check("clicking the other file in the dock shows its window instead", !!flipped, JSON.stringify(await shown()));
+    await checkTitleBars("after switching files");
+
+    top = await front();
+    const editedName = top.win.title;
+    await top.s.menu("视图", "源码");
+    await settle();
+    await top.s.page(`
+      const v = document.querySelector(".ed .cm-content").cmTile.root.view;
+      v.dispatch({ changes: { from: v.state.doc.length, insert: "\\n多文件 e2e 输入。\\n" } });
+    `);
+    const tearOf = (ds: Awaited<ReturnType<typeof docks>>, name: string) => ds.map(({ files }) => files.find((f) => f.name === name)?.tear);
+    const dirty = await settled("both docks to see the edit", async () => {
+      const ds = await docks();
+      return tearOf(ds, editedName).every((t) => t === "dirty") && ds;
+    });
+    check(`typing in ${editedName} runs its tear low in both pages' docks`, !!dirty, summary(dirty || (await docks())));
+    await top.s.menu("文件", "保存");
+    const savedAll = await settled("both docks to see the save", async () => {
+      const ds = await docks();
+      return tearOf(ds, editedName).every((t) => t === "saved") && ds;
+    });
+    const rippled = await top.s.page<boolean>(`return document.querySelector(".dk.on .tear").classList.contains("ripple")`);
+    check("saving fills its tear again in both docks, with a ripple where it was saved", !!savedAll && rippled && (await readFile(join(dir, editedName), "utf8")).includes("多文件 e2e 输入。"), summary(savedAll || (await docks())));
+
+    await top.s.page(`document.querySelector('.dock [aria-label="新建文件"]').click()`);
+    const three = await settled("the new file's window", async () => {
+      const ws = await s.windows();
+      return ws.length === 3 && ws;
+    });
+    const addedId = three ? three.find((w) => !opened.some((o) => o.id === w.id))?.id : undefined;
+    // The window takes its document's name once mygo has told it the document's state.
+    const added = addedId === undefined ? undefined : await settled("the new window's title", async () => {
+      const name = (await currentFile(s.at(addedId).page).catch(() => undefined))?.name;
+      return (await s.windows()).find((w) => w.id === addedId && w.title === name);
+    });
+    const withNew = await settled("every dock to list the new file", async () => {
+      const ds = await docks();
+      return ds.length === 3 && ds.every(({ files }) => files.length === 3 && files.some((f) => f.name === added?.title && f.tear === "empty")) && ds;
+    });
+    const newShown = (await shown()).join() === String(added?.id);
+    check("新建文件 in the dock opens an untitled file as a new tab, an empty tear in every dock", !!withNew && newShown, summary(withNew || (await docks())));
+    if (!added) return;
+    await checkTitleBars("after a new file joins");
+
+    const fresh = s.at(added.id);
+    const order = (await dock(fresh.page)).map((f) => f.name);
+    const next = order[(order.indexOf(added.title) + 1) % order.length];
+    await fresh.menu("视图", "显示下一个文件");
+    const wentNext = await settled("the next file", async () => (await front()).win.title === next);
+    await (await front()).s.menu("视图", "显示上一个文件");
+    const wentBack = await settled("the file before it", async () => (await front()).win.id === added.id);
+    check("视图 › 显示下一个文件 and 显示上一个文件 step through the group's files", !!wentNext && !!wentBack, `${order.join(" → ")}; next ${next}`);
+
+    await fresh.menu("视图", "灯桌总览");
+    await settled("the light table", () => fresh.page<boolean>(`return !!document.querySelector(".lt")`));
+    await Bun.sleep(1000);
+    const table = await fresh.page<{ count: string; pages: string[]; current: string; sketched: number[]; dimmed: boolean }>(`return {
+      count: document.querySelector(".lt-count").textContent,
+      pages: [...document.querySelectorAll(".ltp")].map((p) => p.getAttribute("aria-label")),
+      current: document.querySelector(".ltp.cur .ltp-lbl")?.textContent ?? "",
+      sketched: [...document.querySelectorAll(".ltp .pg")].map((p) => p.children.length),
+      dimmed: document.querySelector(".app").classList.contains("lt-on"),
+    }`);
+    check(
+      "视图 › 灯桌总览 lays out every file as a sketched page, the current one ringed",
+      table.count === "3 个文件" && table.pages.length === 3 && order.every((n) => table.pages.some((p) => p.startsWith(`${n}，`))) && table.current === added.title && table.sketched.every((n) => n > 0) && table.dimmed,
+      JSON.stringify(table),
+    );
+    await fresh.capture("e2e-tabs-light-table");
+    await fresh.page(`
+      const input = document.querySelector("#lt-q");
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "超级");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    `);
+    await settle();
+    const filtered = await fresh.page<string[]>(`return [...document.querySelectorAll(".ltp .ltp-lbl")].map((l) => l.textContent)`);
+    check("the light table's filter narrows the pages by name", filtered.join() === "超级代码块.md", filtered.join(" / "));
+    await fresh.page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await Bun.sleep(400);
+    check("Escape puts the light table away", !(await fresh.page<boolean>(`return !!document.querySelector(".lt") || document.querySelector(".app").classList.contains("lt-on")`)));
+
+    await fresh.page(`document.querySelector(".dk.on .dk-x").click()`);
+    const closed = await settled("the untitled file to close", async () => {
+      const ds = await docks();
+      return ds.length === 2 && ds.every(({ files }) => files.length === 2 && files.every((f) => f.tear === "saved")) && ds;
+    });
+    check("the current file's ✕ in the dock closes it, and every dock drops it", !!closed && (await shown()).length === 1, summary(closed || (await docks())));
+
+    // Dragging a page onto the light table's red zone closes its file.
+    top = await front();
+    await top.s.page(`document.querySelector('.dock [aria-label="新建文件"]').click()`);
+    const again = await settled("another new file", async () => {
+      const ws = await s.windows();
+      return ws.length === 3 && ws.find((w) => !opened.some((o) => o.id === w.id));
+    });
+    if (!again) return check("another new file opens", false);
+    const untitled = s.at(again.id);
+    await waitFor("its page", () => untitled.page<boolean>(`return !!document.querySelector(".dock")`));
+    await untitled.page(`document.querySelector('.dock [aria-label="灯桌总览"]').click()`);
+    await Bun.sleep(1000);
+    const hot = await untitled.page<string>(`
+      const p = document.querySelector(".ltp.cur");
+      const z = document.querySelector(".zone").getBoundingClientRect();
+      const r = p.getBoundingClientRect();
+      const ev = (type, x, y) => p.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, isPrimary: true, pointerType: "mouse", button: 0, buttons: type === "pointerup" ? 0 : 1, clientX: x, clientY: y }));
+      ev("pointerdown", r.left + r.width / 2, r.top + r.height / 2);
+      ev("pointermove", r.left + r.width / 2 + 20, r.top + r.height / 2 + 20);
+      ev("pointermove", z.left + z.width / 2, z.top + z.height / 2);
+      await new Promise((done) => setTimeout(done, 300));
+      return document.querySelector(".zone").className;
+    `);
+    await untitled.page(`document.querySelector(".ltp.cur").dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, button: 0 }))`).catch(() => {});
+    const dropped = await settled("the dragged file to close", async () => {
+      const ds = await docks();
+      return ds.length === 2 && ds.every(({ files }) => files.length === 2) && ds;
+    });
+    check("dragging a page onto the light table's red zone closes its file", hot.includes("hot") && !!dropped, `zone ${hot}; ${summary(dropped || (await docks()))}`);
   });
 }
 

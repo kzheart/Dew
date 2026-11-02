@@ -5,10 +5,11 @@ import { App } from "./app/App";
 import { defaultPrefs } from "./defaultPrefs";
 import { host } from "./platform";
 
-const [text, state, prefs] = await Promise.all([
+const [text, state, prefs, files] = await Promise.all([
   host.doc.content(),
   host.doc.state(),
   host.prefs.get().catch(() => defaultPrefs),
+  host.files.list(),
 ]);
 
-createRoot(document.getElementById("root")!).render(<App initial={{ text, state, prefs }} />);
+createRoot(document.getElementById("root")!).render(<App initial={{ text, state, prefs, files }} />);

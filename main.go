@@ -10,6 +10,7 @@ import (
 )
 
 func main() {
+	files := &filesService{}
 	docs := mygo.NewDocuments(mygo.DocumentsOptions[string]{
 		Types: []mygo.DocumentType{{Name: "Markdown 文稿", Extensions: []string{"md", "markdown"}}},
 		Read: func(r io.Reader) (string, error) {
@@ -21,10 +22,12 @@ func main() {
 			return err
 		},
 		Equal:  func(a, b string) bool { return a == b },
-		Window: newDocumentWindow,
+		Window: func(doc *mygo.Document[string]) *mygo.Window { return newDocumentWindow(files, doc) },
 	})
+	files.docs = docs
 
 	mygo.BindAs("Doc", docs.Service())
+	mygo.BindAs("Files", files)
 	mygo.BindAs("Conflict", &conflictService{docs: docs})
 	mygo.BindAs("Prefs", &prefsStore{})
 	mygo.BindAs("Export", exportService{})
@@ -38,7 +41,9 @@ func main() {
 	}
 }
 
-func newDocumentWindow(doc *mygo.Document[string]) *mygo.Window {
+func newDocumentWindow(files *filesService, doc *mygo.Document[string]) *mygo.Window {
+	// Before the window exists, which takes the focus as it shows.
+	host := files.host()
 	win := mygo.NewWindow(mygo.WindowOptions{
 		URL:                  "/",
 		Width:                1280,
@@ -52,5 +57,6 @@ func newDocumentWindow(doc *mygo.Document[string]) *mygo.Window {
 	})
 	unlockFrameRate(win)
 	shareCardOnContextMenu(win)
+	files.adopt(win, host, doc)
 	return win
 }

@@ -2,9 +2,9 @@ import { isMyGo, onDocumentReload, onDocumentState } from "mygo-runtime";
 import { docFileURL } from "./app/docFile";
 import { defaultPrefs } from "./defaultPrefs";
 import * as go from "./mygo";
-import type { CardBackground, Command, DocumentState, PageGuard, Prefs, ViewState } from "./mygo";
+import type { CardBackground, Command, DocumentState, FileTab, PageGuard, Prefs, ViewState } from "./mygo";
 
-export type { CardBackground, Command, DocumentState, PageGuard, Prefs };
+export type { CardBackground, Command, DocumentState, FileTab, PageGuard, Prefs };
 
 /** What the page needs from its host: the app's Go services, or stand-ins in a browser tab. */
 export interface Host {
@@ -18,6 +18,15 @@ export interface Host {
     keepMine(): Promise<void>;
     onState(fn: (s: DocumentState) => void): () => void;
     onReload(fn: () => void): () => void;
+  };
+  /** The documents of the window's tab group, which the dock shows. */
+  files: {
+    list(): Promise<FileTab[]>;
+    select(id: number): Promise<void>;
+    close(id: number): Promise<void>;
+    "new"(): Promise<void>;
+    content(id: number): Promise<string>;
+    onChange(fn: (tabs: FileTab[]) => void): () => void;
   };
   prefs: { get(): Promise<Prefs>; set(p: Prefs): Promise<void> };
   exports: {
@@ -52,6 +61,7 @@ function appHost(): Host {
       onState: onDocumentState,
       onReload: onDocumentReload,
     },
+    files: { ...go.Files, onChange: (fn) => go.events.files.on(fn) },
     prefs: go.Prefs,
     exports: go.Export,
     assets: go.Assets,
@@ -63,7 +73,10 @@ function appHost(): Host {
 
 const samples = import.meta.glob<string>("../samples/*.md", { query: "?raw", import: "default" });
 
-/** A browser tab edits a sample in memory (?doc=<name> picks it) and exports nothing. */
+/**
+ * A browser tab edits a sample in memory (?doc=<name> picks it) and exports
+ * nothing. Its dock lists every sample, and picking one loads it in the tab.
+ */
 async function browserHost(): Promise<Host> {
   const wanted = `../samples/${new URLSearchParams(location.search).get("doc")}.md`;
   const path = wanted in samples ? wanted : "../samples/版本说明.md";
@@ -71,10 +84,15 @@ async function browserHost(): Promise<Host> {
   let text = await samples[path]!();
   let state: DocumentState = { name, path: "", edited: false, readOnly: false, conflict: false, deleted: false };
   const listeners = new Set<(s: DocumentState) => void>();
+  const fileListeners = new Set<(tabs: FileTab[]) => void>();
   const pastedImages = new Map<string, string>();
+  const paths = Object.keys(samples);
+  const tabs = (): FileTab[] =>
+    paths.map((p, i) => ({ id: i + 1, name: p.slice("../samples/".length), edited: p === path && state.edited, untitled: false, current: p === path }));
   const setState = (s: DocumentState) => {
     state = s;
     listeners.forEach((fn) => fn(s));
+    fileListeners.forEach((fn) => fn(tabs()));
   };
   return {
     inApp: false,
@@ -93,6 +111,23 @@ async function browserHost(): Promise<Host> {
         return () => listeners.delete(fn);
       },
       onReload: () => () => {},
+    },
+    files: {
+      list: async () => tabs(),
+      select: async (id) => {
+        const p = paths[id - 1];
+        if (p && p !== path) location.search = `?doc=${encodeURIComponent(p.slice("../samples/".length, -".md".length))}`;
+      },
+      close: async () => {},
+      new: async () => {},
+      content: async (id) => {
+        const p = paths[id - 1];
+        return p === path ? text : p ? samples[p]!() : "";
+      },
+      onChange: (fn) => {
+        fileListeners.add(fn);
+        return () => fileListeners.delete(fn);
+      },
     },
     prefs: { get: async () => defaultPrefs, set: async () => {} },
     exports: {

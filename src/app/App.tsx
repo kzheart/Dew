@@ -13,25 +13,30 @@ import { parseDocument } from "../markdown/parse";
 import { toggleTask } from "../markdown/source";
 import { Article } from "../preview/Article";
 import type { BlockActions, LightboxTarget } from "../preview/actions";
-import { host, type Command, type DocumentState, type Prefs } from "../platform";
+import { host, type Command, type DocumentState, type FileTab, type Prefs } from "../platform";
 import { modeOf, viewReducer, type ViewState } from "../state/view";
 import { Divider, StatusBar, Toc } from "./Chrome";
+import { Dock } from "./Dock";
 import { Header, type ExportAction, type Popover } from "./Header";
 import { useDebouncedEffect, usePresence } from "./hooks";
+import { LightTable } from "./LightTable";
 import { Lightbox } from "./Lightbox";
 import { ShareCard } from "./ShareCard";
 import { Toasts, useToasts } from "./Toasts";
 import { useDocument } from "./useDocument";
+import { useFiles } from "./useFiles";
 import { useScrollSync } from "./useScrollSync";
 
 export interface Initial {
   text: string;
   state: DocumentState;
   prefs: Prefs;
+  files: FileTab[];
 }
 
 export function App({ initial }: { initial: Initial }) {
   const doc = useDocument(initial);
+  const files = useFiles(initial.files);
   const [prefs, setPrefs] = useState(initial.prefs);
   const [view, dispatch] = useReducer(viewReducer, {
     base: initial.prefs.base,
@@ -55,6 +60,13 @@ export function App({ initial }: { initial: Initial }) {
   const lastCard = useRef<CardContent | null>(null);
   if (card) lastCard.current = card;
   const closeCard = useCallback(() => setCard(null), []);
+  const [overview, setOverview] = useState(false);
+  const lightTable = usePresence(overview, 240);
+  const closeOverview = useCallback(() => setOverview(false), []);
+  const openOverview = () => {
+    setPopover(null);
+    setOverview(true);
+  };
 
   const parsed = useMemo(() => parseDocument(doc.text, { resolveImage: host.imageURL }), [doc.text]);
 
@@ -217,6 +229,10 @@ export function App({ initial }: { initial: Initial }) {
       case "shareCard":
         runExport("shareCard");
         break;
+      case "overview":
+        if (overview) closeOverview();
+        else openOverview();
+        break;
     }
   };
   useEffect(() => host.onCommand((c) => onCommand.current(c)), []);
@@ -231,7 +247,7 @@ export function App({ initial }: { initial: Initial }) {
   const theme = showEd && !isSplit ? "" : prefs.bg === "night" ? " th-night" : prefs.bg === "paper" ? " th-paper" : "";
 
   return (
-    <div className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}`}>
+    <div className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}`}>
       <main className="main">
         {showEd && (
           <section className="pane-ed" aria-label="源码编辑" style={{ flex: isSplit ? `0 0 ${split}%` : "1 1 auto" }}>
@@ -305,6 +321,30 @@ export function App({ initial }: { initial: Initial }) {
       )}
       <Toasts toasts={toasts.toasts} onDismiss={toasts.dismiss} />
       <StatusBar chars={parsed.stats.chars} minutes={parsed.stats.minutes} mode={mode} cursor={cursor} blockLabel={liveLabel} />
+      <Dock
+        files={files}
+        onSelect={(id) => void host.files.select(id).catch(() => {})}
+        onClose={(id) => void host.files.close(id).catch(() => {})}
+        onNew={() => void host.files.new().catch(() => {})}
+        onOverview={openOverview}
+      />
+      {lightTable.mounted && (
+        <LightTable
+          files={files}
+          text={doc.text}
+          leaving={lightTable.leaving}
+          onSelect={(id) => {
+            closeOverview();
+            if (!files.find((f) => f.id === id)?.current) void host.files.select(id).catch(() => {});
+          }}
+          onCloseFile={(id) => void host.files.close(id).catch(() => {})}
+          onNew={() => {
+            closeOverview();
+            void host.files.new().catch(() => {});
+          }}
+          onClose={closeOverview}
+        />
+      )}
     </div>
   );
 }

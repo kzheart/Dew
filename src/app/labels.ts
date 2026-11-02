@@ -34,16 +34,16 @@ export function blockLabel(b: Block): string {
   }
 }
 
-export type TitleStatus =
-  | { kind: "conflict"; text: string }
-  | { kind: "plain"; text: string; warn?: boolean };
+export interface TitleStatus {
+  /** Another app changed the file under unsaved edits: the glass offers to keep either. */
+  conflict: boolean;
+  text: string;
+}
 
-/** The line under the file name in the title glass. */
-export function titleStatus(s: DocumentState): TitleStatus {
-  if (s.conflict) return { kind: "conflict", text: "磁盘上的文件已被其他应用修改" };
-  if (s.deleted) return { kind: "plain", text: "文件已被删除 · 保存将重新写入", warn: true };
-  if (s.readOnly) return { kind: "plain", text: "只读", warn: true };
-  if (!s.path) return { kind: "plain", text: s.edited ? "未保存 · 已编辑" : "未保存" };
-  if (s.edited) return { kind: "plain", text: "已编辑" };
-  return { kind: "plain", text: "已保存 · 与磁盘同步" };
+/** What the title glass warns of, or null: the dock's tear shows a file's save state. */
+export function titleStatus(s: DocumentState): TitleStatus | null {
+  if (s.conflict) return { conflict: true, text: "磁盘上的文件已被其他应用修改" };
+  if (s.deleted) return { conflict: false, text: "文件已被删除 · 保存将重新写入" };
+  if (s.readOnly) return { conflict: false, text: "只读" };
+  return null;
 }

@@ -14,7 +14,7 @@ export type BaseMode = "live" | "preview";
 export type CardBackground = "blue" | "orange" | "green" | "gray";
 
 /** Command is a menu command that the focused window's page carries out. */
-export type Command = "save" | "live" | "preview" | "source" | "split" | "focus" | "inline" | "exportPDF" | "exportHTML" | "copyRichText" | "shareCard";
+export type Command = "save" | "live" | "preview" | "source" | "split" | "focus" | "inline" | "exportPDF" | "exportHTML" | "copyRichText" | "shareCard" | "overview";
 
 /**
  * DocumentState describes a document, as Document.State returns it and
@@ -45,6 +45,21 @@ export interface DocumentState {
    * writes it again.
    */
   deleted: boolean;
+}
+
+/**
+ * FileTab is one document of a window's tab group, as that group's dock
+ * shows it.
+ */
+export interface FileTab {
+  /** ID is the ID of the document's window. */
+  id: number;
+  name: string;
+  edited: boolean;
+  /** Untitled reports that the document has no file yet. */
+  untitled: boolean;
+  /** Current reports that the tab is the one the receiving page shows. */
+  current: boolean;
 }
 
 /** Font is the typeface family of the rendered document. */
@@ -158,6 +173,40 @@ export const Doc = {
 } as const;
 
 /**
+ * filesService lets a page list, switch to, open and close the documents
+ * of its window's tab group. Document windows are tabs of one native
+ * window, whose own tab bar is hidden: the page draws the dock instead.
+ */
+export const Files = {
+  /**
+   * Close closes the document of the tab group's window id, which asks to
+   * save it first when it must.
+   */
+  close(id: number): Promise<void> {
+    return call("Files.Close", id);
+  },
+  /** Content returns the text of the document of the tab group's window id. */
+  content(id: number): Promise<string> {
+    return call("Files.Content", id);
+  },
+  /**
+   * List returns the documents of the calling window's tab group, in tab
+   * order.
+   */
+  list(): Promise<FileTab[]> {
+    return call("Files.List");
+  },
+  /** New opens an untitled document, as a tab of the focused group. */
+  new(): Promise<void> {
+    return call("Files.New");
+  },
+  /** Select shows the document of the tab group's window id. */
+  select(id: number): Promise<void> {
+    return call("Files.Select", id);
+  },
+} as const;
+
+/**
  * conflictService resolves a document whose file another app changed while
  * it had unsaved changes. Reverting is Doc.revert.
  */
@@ -257,4 +306,9 @@ export const Assets = {
 export const events = {
   /** Commands carries menu commands to the page of the focused window. */
   command: event<Command>("command"),
+  /**
+   * Files tells each page of a tab group what the group's dock shows, as it
+   * changes.
+   */
+  files: event<FileTab[]>("files"),
 } as const;

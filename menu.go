@@ -23,6 +23,7 @@ const (
 	CommandExportHTML   Command = "exportHTML"
 	CommandCopyRichText Command = "copyRichText"
 	CommandShareCard    Command = "shareCard"
+	CommandOverview     Command = "overview"
 )
 
 // Commands carries menu commands to the page of the focused window.
@@ -105,6 +106,10 @@ func newMenuBar() *mygo.Menu {
 			mygo.Separator(),
 			{ID: "focus", Label: "聚光灯模式", Type: mygo.MenuItemCheckbox, Accelerator: "Shift+CmdOrCtrl+F", Click: send(CommandFocus)},
 			{ID: "inline", Label: "行内渲染", Type: mygo.MenuItemCheckbox, Click: send(CommandInline)},
+			mygo.Separator(),
+			{Label: "显示下一个文件", Accelerator: "Shift+CmdOrCtrl+]", Click: showNeighbor(1)},
+			{Label: "显示上一个文件", Accelerator: "Shift+CmdOrCtrl+[", Click: showNeighbor(-1)},
+			{Label: "灯桌总览", Accelerator: `Shift+CmdOrCtrl+\`, Click: send(CommandOverview)},
 			mygo.Separator(),
 			{Role: mygo.RoleToggleFullScreen},
 		}},
