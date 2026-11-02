@@ -48,10 +48,12 @@ const original = await readFile(file, "utf8");
 
 console.log("building…");
 await $`bun run build:web`.cwd(root).quiet();
+// DEW_E2E_APP gives parallel runs (e.g. from two worktrees) their own app data.
+const appName = process.env.DEW_E2E_APP ?? "DewE2E";
 const ldflags = [
   "-X github.com/egoist/mygo.packageFileExtensions=md,markdown",
-  "-X github.com/egoist/mygo.packageName=DewE2E",
-  "-X github.com/egoist/mygo.packageIdentifier=com.example.dew.e2e",
+  `-X github.com/egoist/mygo.packageName=${appName}`,
+  `-X github.com/egoist/mygo.packageIdentifier=com.example.dew.e2e.${appName.toLowerCase()}`,
 ].join(" ");
 await $`go build -tags e2e -ldflags ${ldflags} -o dew-e2e .`.cwd(root);
 
@@ -67,7 +69,7 @@ const settle = () => Bun.sleep(450);
 /** Opens path in a fresh launch of the app, runs steps against its window, and quits it. */
 async function session(path: string, steps: (s: Session) => Promise<void>) {
   // Its own settings, reset, so every run starts in the default mode.
-  await rm(join(homedir(), "Library/Application Support/DewE2E"), { recursive: true, force: true });
+  await rm(join(homedir(), "Library/Application Support", appName), { recursive: true, force: true });
   await rm(socket, { force: true });
   const proc = Bun.spawn([join(root, "dew-e2e"), path], {
     env: { ...process.env, MYGO_AUTOMATION: socket, DEW_E2E_SAVE_DIR: work },
