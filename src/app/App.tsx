@@ -14,6 +14,8 @@ import { toggleTask } from "../markdown/source";
 import { Article } from "../preview/Article";
 import type { BlockActions, LightboxTarget } from "../preview/actions";
 import { host, type Command, type DocumentState, type FileTab, type Prefs } from "../platform";
+import { changedKeys } from "../state/prefs";
+import { fileName } from "../state/recent";
 import { modeOf, viewReducer, type ViewState } from "../state/view";
 import { Divider, StatusBar, Toc } from "./Chrome";
 import { Dock } from "./Dock";
@@ -25,6 +27,8 @@ import { ShareCard } from "./ShareCard";
 import { Toasts, useToasts } from "./Toasts";
 import { useDocument } from "./useDocument";
 import { useFiles } from "./useFiles";
+import { useReadingProgress } from "./useReadingProgress";
+import { useRecent } from "./useRecent";
 import { useScrollSync } from "./useScrollSync";
 
 export interface Initial {
@@ -32,11 +36,14 @@ export interface Initial {
   state: DocumentState;
   prefs: Prefs;
   files: FileTab[];
+  /** How far the document was read when it last closed, from 0 to 1. */
+  resume: number;
 }
 
 export function App({ initial }: { initial: Initial }) {
   const doc = useDocument(initial);
   const files = useFiles(initial.files);
+  const recent = useRecent();
   const [prefs, setPrefs] = useState(initial.prefs);
   const [view, dispatch] = useReducer(viewReducer, {
     base: initial.prefs.base,
@@ -85,11 +92,18 @@ export function App({ initial }: { initial: Initial }) {
 
   const updatePrefs = useCallback((p: Partial<Prefs>) => setPrefs((old) => ({ ...old, ...p })), []);
   const sourcePref: Prefs["source"] = view.source ?? "off";
-  useDebouncedEffect({ ...prefs, base: view.base, source: sourcePref }, 300, (p) => void host.prefs.set(p).catch(() => {}));
+  // Only what this window changed, so that it never puts back what another window changed meanwhile.
+  const savedPrefs = useRef(initial.prefs);
+  useDebouncedEffect({ ...prefs, base: view.base, source: sourcePref }, 300, (p) => {
+    const keys = changedKeys(savedPrefs.current, p);
+    savedPrefs.current = p;
+    if (keys.length) void host.prefs.update(p, keys).catch(() => {});
+  });
 
   const pvRef = useRef<HTMLDivElement>(null);
   const articleRef = useRef<HTMLElement>(null);
   const sync = useScrollSync(edView, pvRef, isSplit);
+  const trackProgress = useReadingProgress(() => (showPv ? pvRef.current : edView.current?.scrollDOM ?? null), initial.resume);
   // Entering split, the pane that was already on screen keeps its place and the new one follows it.
   const prevMode = useRef(mode);
   useEffect(() => {
@@ -101,6 +115,7 @@ export function App({ initial }: { initial: Initial }) {
   }, [mode]);
   const lastY = useRef<Record<string, number>>({});
   const trackScroll = (el: HTMLElement, key: string) => {
+    trackProgress(el);
     const y = el.scrollTop;
     const last = lastY.current[key] ?? 0;
     lastY.current[key] = y;
@@ -149,6 +164,12 @@ export function App({ initial }: { initial: Initial }) {
   const docName = doc.state.name;
   const toasts = useToasts();
   const { notify } = toasts;
+  /** Opens a file as a tab of this group: a recent one, or one beside this document. */
+  const openPath = useCallback(
+    (path: string) =>
+      void host.files.open(path).catch(() => notify({ icon: "warn", title: `打不开 ${fileName(path)}`, detail: "它可能已被移动或删除" })),
+    [notify],
+  );
   const { flush } = doc;
   const assist = useMemo(
     () =>
@@ -344,6 +365,7 @@ export function App({ initial }: { initial: Initial }) {
       {lightTable.mounted && (
         <LightTable
           files={files}
+          recent={recent}
           text={doc.text}
           leaving={lightTable.leaving}
           onSelect={(id) => {
@@ -351,6 +373,10 @@ export function App({ initial }: { initial: Initial }) {
             if (!files.find((f) => f.id === id)?.current) void host.files.select(id).catch(() => {});
           }}
           onCloseFile={(id) => void host.files.close(id).catch(() => {})}
+          onReopen={(path) => {
+            closeOverview();
+            openPath(path);
+          }}
           onNew={() => {
             closeOverview();
             void host.files.new().catch(() => {});

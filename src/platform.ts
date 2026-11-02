@@ -2,9 +2,9 @@ import { isMyGo, onDocumentReload, onDocumentState } from "mygo-runtime";
 import { docFileURL } from "./app/docFile";
 import { defaultPrefs } from "./defaultPrefs";
 import * as go from "./mygo";
-import type { CardBackground, Command, DocumentState, FileTab, PageGuard, Prefs, ViewState } from "./mygo";
+import type { CardBackground, Command, DocumentState, FileTab, FolderFile, PageGuard, Prefs, RecentFile, ViewState } from "./mygo";
 
-export type { CardBackground, Command, DocumentState, FileTab, PageGuard, Prefs };
+export type { CardBackground, Command, DocumentState, FileTab, FolderFile, PageGuard, Prefs, RecentFile };
 
 /** What the page needs from its host: the app's Go services, or stand-ins in a browser tab. */
 export interface Host {
@@ -26,9 +26,28 @@ export interface Host {
     close(id: number): Promise<void>;
     "new"(): Promise<void>;
     content(id: number): Promise<string>;
+    /** Opens a Markdown file as a tab of the focused group. */
+    open(path: string): Promise<void>;
+    /** The Markdown files beside the window's document. */
+    folder(): Promise<FolderFile[]>;
+    /** Opens a new, empty file of that name beside the window's document. */
+    create(name: string): Promise<void>;
     onChange(fn: (tabs: FileTab[]) => void): () => void;
   };
-  prefs: { get(): Promise<Prefs>; set(p: Prefs): Promise<void> };
+  /** The files windows closed, with how far they were read. */
+  recent: {
+    list(): Promise<RecentFile[]>;
+    pin(path: string, pinned: boolean): Promise<void>;
+    clear(): Promise<void>;
+    head(path: string): Promise<string>;
+    /** Tells how far the window's document is read, from 0 to 1. */
+    report(progress: number): Promise<void>;
+    /** How far the window's document was read when it last closed. */
+    resume(): Promise<number>;
+    onChange(fn: (files: RecentFile[]) => void): () => void;
+  };
+  /** The preferences new windows start with; update saves only the named keys. */
+  prefs: { get(): Promise<Prefs>; update(p: Prefs, keys: (keyof Prefs)[]): Promise<void> };
   exports: {
     pdf(html: string, name: string): Promise<string>;
     html(html: string, name: string): Promise<string>;
@@ -62,6 +81,7 @@ function appHost(): Host {
       onReload: onDocumentReload,
     },
     files: { ...go.Files, onChange: (fn) => go.events.files.on(fn) },
+    recent: { ...go.Recent, onChange: (fn) => go.events.recent.on(fn) },
     prefs: go.Prefs,
     exports: go.Export,
     assets: go.Assets,
@@ -88,7 +108,7 @@ async function browserHost(): Promise<Host> {
   const pastedImages = new Map<string, string>();
   const paths = Object.keys(samples);
   const tabs = (): FileTab[] =>
-    paths.map((p, i) => ({ id: i + 1, name: p.slice("../samples/".length), edited: p === path && state.edited, untitled: false, current: p === path }));
+    paths.map((p, i) => ({ id: i + 1, name: p.slice("../samples/".length), path: p, edited: p === path && state.edited, untitled: false, current: p === path }));
   const setState = (s: DocumentState) => {
     state = s;
     listeners.forEach((fn) => fn(s));
@@ -124,12 +144,24 @@ async function browserHost(): Promise<Host> {
         const p = paths[id - 1];
         return p === path ? text : p ? samples[p]!() : "";
       },
+      open: async () => {},
+      folder: async () => [],
+      create: async () => {},
       onChange: (fn) => {
         fileListeners.add(fn);
         return () => fileListeners.delete(fn);
       },
     },
-    prefs: { get: async () => defaultPrefs, set: async () => {} },
+    recent: {
+      list: async () => [],
+      pin: async () => {},
+      clear: async () => {},
+      head: async () => "",
+      report: async () => {},
+      resume: async () => 0,
+      onChange: () => () => {},
+    },
+    prefs: { get: async () => defaultPrefs, update: async () => {} },
     exports: {
       pdf: async () => "",
       html: async () => "",

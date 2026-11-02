@@ -1010,7 +1010,7 @@ async function tabChecks() {
     }`);
     check(
       "视图 › 灯桌总览 lays out every file as a sketched page, the current one ringed",
-      table.count === "3 个文件" && table.pages.length === 3 && order.every((n) => table.pages.some((p) => p.startsWith(`${n}，`))) && table.current === added.title && table.sketched.every((n) => n > 0) && table.dimmed,
+      table.count === "3 个打开 · 0 个最近" && table.pages.length === 3 && order.every((n) => table.pages.some((p) => p.startsWith(`${n}，`))) && table.current === added.title && table.sketched.every((n) => n > 0) && table.dimmed,
       JSON.stringify(table),
     );
     await fresh.capture("e2e-tabs-light-table");
@@ -1069,6 +1069,57 @@ async function tabChecks() {
       return ds.length === 2 && ds.every(({ files }) => files.length === 2) && ds;
     });
     check("dragging a page onto the light table's red zone closes its file", hot.includes("hot") && !!dropped, `zone ${hot}; ${summary(dropped || (await docks()))}`);
+
+    // Closing a file leaves it in the 水汽 with how far it was read; reopening it scrolls back there.
+    top = await front();
+    const readName = top.win.title;
+    await top.s.page(`const el = document.querySelector(".pv-scroll"); el.scrollTop = 0.5 * (el.scrollHeight - el.clientHeight)`);
+    await Bun.sleep(700);
+    await top.s.page(`document.querySelector(".dk.on .dk-x").click()`);
+    const left = await settled("the read file to close", async () => (await s.windows()).length === 1 && (await front()));
+    if (!left) return check("closing a read file leaves one open", false, summary(await docks()));
+    await left.s.page(`document.querySelector('.dock [aria-label="灯桌总览"]').click()`);
+    const card = await settled("its card in the 水汽", () =>
+      left.s.page<string | null>(`return [...document.querySelectorAll(".vap .rc")].map((c) => c.getAttribute("aria-label")).find((l) => l.startsWith(${JSON.stringify(`${readName}，`)})) ?? null`),
+    );
+    const pill = await left.s.text(".lt-count");
+    check("a closed file lies in the light table's 水汽 under 刚刚关闭, read to 50%", !!card && card.includes("读到 50%") && pill === "1 个打开 · 1 个最近" && (await left.s.text(".vap .vlab")).startsWith("刚刚关闭"), `${card}; ${pill}`);
+    await Bun.sleep(1200);
+    await left.s.capture("e2e-tabs-vapor");
+    await left.s.page(`document.querySelector(".vap .rc").click()`);
+    // The file opens in whichever view new windows start in; the restore follows that view's scroller.
+    let last: number | null = null;
+    const back = await settled("the file to reopen where it was read", async () => {
+      const f = await front();
+      if (f.win.title !== readName) return null;
+      const ratio = await f.s.page<number>(`const el = document.querySelector(".pv-scroll") ?? document.querySelector(".ed .cm-scroller"); return el.scrollTop / (el.scrollHeight - el.clientHeight)`);
+      last = ratio;
+      return Math.abs(ratio - 0.5) < 0.02 && { f, ratio };
+    });
+    check("clicking the card reopens the file as a tab of the group, scrolled back to 50%", !!back && (await dock(back.f.s.page)).length === 2, back ? `ratio ${back.ratio}` : `ratio ${last}; ${summary(await docks())}`);
+    if (!back) return;
+
+    // Weeks of closed files fold into stacks, with a scrubber to jump through them.
+    const dayMs = 86400000;
+    await back.f.s.page(`
+      const now = Date.now();
+      const files = Array.from({ length: 30 }, (_, i) => ({ path: "/tmp/dew-e2e/旧文件-" + i + ".md", closedAt: now - (2 + i * 1.5) * ${dayMs}, progress: 0.3, pinned: false }));
+      await mygo.call("RecentProbe.Seed", files);
+    `);
+    await back.f.s.page(`document.querySelector('.dock [aria-label="灯桌总览"]').click()`);
+    const folded = await settled("the stacks", () =>
+      back.f.s.page<{ stacks: string[]; scrub: string[] } | null>(`
+        const stacks = [...document.querySelectorAll(".vap .stk")].map((k) => k.getAttribute("aria-label"));
+        return stacks.length ? { stacks, scrub: [...document.querySelectorAll(".scrub button")].map((b) => b.textContent) } : null;
+      `),
+    );
+    check("older closed files fold into stacks by age, and a scrubber lists the ages", !!folded && folded.stacks.some((k) => k.startsWith("最近 30 天，")) && folded.scrub.includes("最近 30 天"), JSON.stringify(folded));
+    await back.f.s.page(`document.querySelector('.vap .stk[aria-label^="最近 30 天"]').click()`);
+    const opened30 = await settled("the 30-day block", () => back.f.s.page<boolean>(`return [...document.querySelectorAll(".vap .vlab")].some((l) => l.textContent.startsWith("最近 30 天") && l.textContent.endsWith("收起"))`));
+    check("clicking a stack lays its files out as cards", !!opened30);
+    await Bun.sleep(1200);
+    await back.f.s.capture("e2e-tabs-vapor-stacks");
+    await back.f.s.page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
   });
 }
 

@@ -14,7 +14,7 @@ export type BaseMode = "live" | "preview";
 export type CardBackground = "blue" | "orange" | "green" | "gray";
 
 /** Command is a menu command that the focused window's page carries out. */
-export type Command = "save" | "live" | "preview" | "source" | "split" | "focus" | "inline" | "exportPDF" | "exportHTML" | "copyRichText" | "shareCard" | "overview";
+export type Command = "save" | "live" | "preview" | "source" | "split" | "focus" | "inline" | "exportPDF" | "exportHTML" | "copyRichText" | "shareCard" | "overview" | "quickOpen" | "settings";
 
 /**
  * DocumentState describes a document, as Document.State returns it and
@@ -55,11 +55,19 @@ export interface FileTab {
   /** ID is the ID of the document's window. */
   id: number;
   name: string;
+  /** Path is the document's file, "" while it is untitled. */
+  path: string;
   edited: boolean;
   /** Untitled reports that the document has no file yet. */
   untitled: boolean;
   /** Current reports that the tab is the one the receiving page shows. */
   current: boolean;
+}
+
+/** FolderFile is a Markdown file beside the calling window's document. */
+export interface FolderFile {
+  name: string;
+  path: string;
 }
 
 /** Font is the typeface family of the rendered document. */
@@ -94,6 +102,29 @@ export interface Prefs {
   cardBg: CardBackground;
   watermark: string;
   pageGuard: PageGuard;
+  /**
+   * Keep is how many recent files the light table remembers, besides
+   * the pinned ones.
+   */
+  keep: number;
+  /**
+   * Glass is the texture of the glass controls, from 0 (clear) to 10
+   * (frosted).
+   */
+  glass: number;
+}
+
+/**
+ * RecentFile is a file that was open in a window and closed, as the light
+ * table's 水汽 and the quick open palette show it.
+ */
+export interface RecentFile {
+  path: string;
+  /** ClosedAt is when its window last closed, in Unix milliseconds. */
+  closedAt: number;
+  /** Progress is how far it was read when it closed, from 0 to 1. */
+  progress: number;
+  pinned: boolean;
 }
 
 /** SourceLayout is how the Markdown source shows, if at all. */
@@ -190,6 +221,22 @@ export const Files = {
     return call("Files.Content", id);
   },
   /**
+   * Create writes an empty Markdown file named name in the folder of the
+   * calling window's document and opens it. An untitled document has no
+   * folder: the new file is untitled as well, and the user names it when
+   * saving.
+   */
+  create(name: string): Promise<void> {
+    return call("Files.Create", name);
+  },
+  /**
+   * Folder lists the Markdown files in the folder of the calling window's
+   * document, but that document, by name; none for an untitled one.
+   */
+  folder(): Promise<FolderFile[]> {
+    return call("Files.Folder");
+  },
+  /**
    * List returns the documents of the calling window's tab group, in tab
    * order.
    */
@@ -199,6 +246,13 @@ export const Files = {
   /** New opens an untitled document, as a tab of the focused group. */
   new(): Promise<void> {
     return call("Files.New");
+  },
+  /**
+   * Open opens the Markdown file at path as a tab of the focused group, or
+   * shows it where it is open already.
+   */
+  open(path: string): Promise<void> {
+    return call("Files.Open", path);
   },
   /** Select shows the document of the tab group's window id. */
   select(id: number): Promise<void> {
@@ -229,6 +283,57 @@ export const Prefs = {
   /** Set saves the preferences. */
   set(p: Prefs): Promise<void> {
     return call("Prefs.Set", p);
+  },
+  /**
+   * Update saves the fields of p that keys name by their JSON names, and
+   * keeps the others as they are: each window changes only what it changed.
+   */
+  update(p: Prefs, keys: string[]): Promise<void> {
+    return call("Prefs.Update", p, keys);
+  },
+} as const;
+
+/**
+ * recentService records the files windows close with how far they were
+ * read, and lets pages list, pin and forget them.
+ */
+export const Recent = {
+  /** Clear forgets every recent file, the pinned ones too. */
+  clear(): Promise<void> {
+    return call("Recent.Clear");
+  },
+  /** Forget drops the file at path from the recent files. */
+  forget(path: string): Promise<void> {
+    return call("Recent.Forget", path);
+  },
+  /** Head returns the start of the recent file at path, for its sketch. */
+  head(path: string): Promise<string> {
+    return call("Recent.Head", path);
+  },
+  /** List returns the recent files that no window shows, newest first. */
+  list(): Promise<RecentFile[]> {
+    return call("Recent.List");
+  },
+  /**
+   * Pin keeps the recent file at path above the others, and past the limit
+   * of recent files, or lets it go back among them.
+   */
+  pin(path: string, pinned: boolean): Promise<void> {
+    return call("Recent.Pin", path, pinned);
+  },
+  /**
+   * Report keeps how far the calling window's page has read its document,
+   * from 0 to 1, for when the window closes.
+   */
+  report(progress: number): Promise<void> {
+    return call("Recent.Report", progress);
+  },
+  /**
+   * Resume returns how far the calling window's document was read when it
+   * last closed, 0 for a file it never showed.
+   */
+  resume(): Promise<number> {
+    return call("Recent.Resume");
   },
 } as const;
 
@@ -306,6 +411,11 @@ export const Assets = {
 export const events = {
   /** Commands carries menu commands to the page of the focused window. */
   command: event<Command>("command"),
+  /**
+   * RecentFiles tells every document window the recent files, newest first,
+   * as they change. Files open in some window are left out.
+   */
+  recent: event<RecentFile[]>("recent"),
   /**
    * Files tells each page of a tab group what the group's dock shows, as it
    * changes.

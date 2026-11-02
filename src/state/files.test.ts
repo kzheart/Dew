@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import type { FileTab } from "../mygo";
 import { changes, dropState, fileStatus, withClosed } from "./files";
 
-const tab = (id: number, more: Partial<FileTab> = {}): FileTab => ({ id, name: `${id}.md`, edited: false, untitled: false, current: false, ...more });
+const tab = (id: number, more: Partial<FileTab> = {}): FileTab => ({ id, name: `${id}.md`, path: `/d/${id}.md`, edited: false, untitled: false, current: false, ...more });
 
 test("a tear is dirty while edited, empty while untitled, else saved", () => {
   expect(dropState(tab(1))).toBe("saved");

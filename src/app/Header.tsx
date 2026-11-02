@@ -217,7 +217,7 @@ function ExportPopover({ open, guard, onGuard, onExport }: { open: boolean; guar
     <div className={leaving ? "pop pop-exp out" : "pop pop-exp"} role="menu" aria-label="导出与分享">
       <button className="mi" role="menuitem" onClick={() => onExport("pdf")}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /></svg>
-        <span>导出为 PDF…<small>{guardSummary(guard)}</small></span><span className="sc">⌘P</span>
+        <span>导出为 PDF…<small>{guardSummary(guard)}</small></span><span className="sc">⇧⌘E</span>
       </button>
       <div className="pg-guard" role="group" aria-label="分页保护">
         <span className="pg-guard-l" aria-hidden="true">分页保护<small>放不下时整体移到下一页</small></span>

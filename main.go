@@ -10,6 +10,7 @@ import (
 )
 
 func main() {
+	prefs := &prefsStore{}
 	files := &filesService{}
 	docs := mygo.NewDocuments(mygo.DocumentsOptions[string]{
 		Types: []mygo.DocumentType{{Name: "Markdown 文稿", Extensions: []string{"md", "markdown"}}},
@@ -25,11 +26,16 @@ func main() {
 		Window: func(doc *mygo.Document[string]) *mygo.Window { return newDocumentWindow(files, doc) },
 	})
 	files.docs = docs
+	files.recent = &recentService{docs: docs, prefs: prefs}
 
 	mygo.BindAs("Doc", docs.Service())
 	mygo.BindAs("Files", files)
 	mygo.BindAs("Conflict", &conflictService{docs: docs})
-	mygo.BindAs("Prefs", &prefsStore{})
+	mygo.BindAs("Prefs", prefs)
+	mygo.BindAs("Recent", files.recent)
+	for _, bind := range bindE2E {
+		bind(files)
+	}
 	mygo.BindAs("Export", exportService{})
 	mygo.BindAs("View", &viewService{})
 	mygo.BindAs("Assets", &assetService{docs: docs})
@@ -40,6 +46,9 @@ func main() {
 		log.Fatal(err)
 	}
 }
+
+// bindE2E binds the probes an e2e build adds.
+var bindE2E []func(*filesService)
 
 func newDocumentWindow(files *filesService, doc *mygo.Document[string]) *mygo.Window {
 	// Before the window exists, which takes the focus as it shows.

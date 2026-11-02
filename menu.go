@@ -24,6 +24,8 @@ const (
 	CommandCopyRichText Command = "copyRichText"
 	CommandShareCard    Command = "shareCard"
 	CommandOverview     Command = "overview"
+	CommandQuickOpen    Command = "quickOpen"
+	CommandSettings     Command = "settings"
 )
 
 // Commands carries menu commands to the page of the focused window.
@@ -77,10 +79,23 @@ var menuBar *mygo.Menu
 
 func newMenuBar() *mygo.Menu {
 	menuBar = mygo.NewMenu([]*mygo.MenuItem{
-		{Role: mygo.RoleAppMenu},
+		{Role: mygo.RoleAppMenu, Submenu: []*mygo.MenuItem{
+			{Role: mygo.RoleAbout},
+			mygo.Separator(),
+			{Label: "设置…", Accelerator: "CmdOrCtrl+,", Click: send(CommandSettings)},
+			mygo.Separator(),
+			{Role: mygo.RoleServices},
+			mygo.Separator(),
+			{Role: mygo.RoleHide},
+			{Role: mygo.RoleHideOthers},
+			{Role: mygo.RoleUnhide},
+			mygo.Separator(),
+			{Role: mygo.RoleQuit},
+		}},
 		{Role: mygo.RoleFileMenu, Submenu: []*mygo.MenuItem{
 			{Role: mygo.RoleNew},
 			{Role: mygo.RoleOpen},
+			{Label: "快速打开…", Accelerator: "CmdOrCtrl+P", Click: send(CommandQuickOpen)},
 			{Role: mygo.RoleOpenRecent},
 			mygo.Separator(),
 			{Role: mygo.RoleClose},
@@ -92,7 +107,7 @@ func newMenuBar() *mygo.Menu {
 			{Role: mygo.RoleMoveTo},
 			{Role: mygo.RoleRevert},
 			mygo.Separator(),
-			{Label: "导出为 PDF…", Accelerator: "CmdOrCtrl+P", Click: send(CommandExportPDF)},
+			{Label: "导出为 PDF…", Accelerator: "Shift+CmdOrCtrl+E", Click: send(CommandExportPDF)},
 			{Label: "导出为 HTML…", Click: send(CommandExportHTML)},
 			{Label: "拷贝为富文本", Accelerator: "Alt+CmdOrCtrl+C", Click: send(CommandCopyRichText)},
 			{Label: "将选区生成分享卡片…", Click: send(CommandShareCard)},

@@ -5,4 +5,5 @@ export const defaultPrefs: Prefs = {
   base: "live", source: "off", inline: false, showLn: true,
   cardBg: "blue", watermark: "",
   pageGuard: { code: true, table: true, chart: true, image: false },
+  keep: 50, glass: 4,
 };

@@ -80,6 +80,12 @@ type Prefs struct {
 	CardBackground  CardBackground `json:"cardBg"`
 	Watermark       string         `json:"watermark"`
 	PageGuard       PageGuard      `json:"pageGuard"`
+	// Keep is how many recent files the light table remembers, besides
+	// the pinned ones.
+	Keep int `json:"keep"`
+	// Glass is the texture of the glass controls, from 0 (clear) to 10
+	// (frosted).
+	Glass int `json:"glass"`
 }
 
 func defaultPrefs() Prefs {
@@ -89,6 +95,7 @@ func defaultPrefs() Prefs {
 		Base: BaseLive, Source: SourceOff, ShowLineNumbers: true,
 		CardBackground: CardBlue,
 		PageGuard:      PageGuard{Code: true, Table: true, Chart: true},
+		Keep:           50, Glass: 4,
 	}
 }
 
@@ -103,6 +110,8 @@ func (p Prefs) normalized() Prefs {
 	p.FontSize = clamp(p.FontSize, 13, 22)
 	p.LineHeight = clamp(p.LineHeight, 1.4, 2.2)
 	p.ParagraphGap = clamp(p.ParagraphGap, 0.6, 1.8)
+	p.Keep = clamp(p.Keep, 10, 200)
+	p.Glass = clamp(p.Glass, 0, 10)
 	if p.Font != FontSerif && p.Font != FontSans && p.Font != FontMono {
 		p.Font = d.Font
 	}
@@ -168,6 +177,40 @@ func (s *prefsStore) Get() (Prefs, error) {
 	}
 	s.prefs, s.loaded = p.normalized(), true
 	return s.prefs, nil
+}
+
+// Update saves the fields of p that keys name by their JSON names, and
+// keeps the others as they are: each window changes only what it changed.
+func (s *prefsStore) Update(p Prefs, keys []string) error {
+	cur, err := s.Get()
+	if err != nil {
+		return err
+	}
+	var from, onto map[string]json.RawMessage
+	if err := remarshal(p, &from); err != nil {
+		return err
+	}
+	if err := remarshal(cur, &onto); err != nil {
+		return err
+	}
+	for _, k := range keys {
+		if v, ok := from[k]; ok {
+			onto[k] = v
+		}
+	}
+	next := defaultPrefs()
+	if err := remarshal(onto, &next); err != nil {
+		return err
+	}
+	return s.Set(next)
+}
+
+func remarshal(from, to any) error {
+	b, err := json.Marshal(from)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, to)
 }
 
 // Set saves the preferences.
