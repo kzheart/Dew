@@ -1,25 +1,26 @@
 #!/usr/bin/env bun
 /**
- * Drives the real app through mygo's automation plugin on a copy of
- * samples/版本说明.md, checks what the user would see and what lands on disk,
- * and captures PNGs along the way.
+ * Drives the real app through mygo's automation plugin on copies of
+ * samples/版本说明.md and samples/超级代码块.md, checks what the user would
+ * see and what lands on disk, and captures PNGs along the way.
  *
  *   bun scripts/e2e.ts [out-dir]
  *
  * Captures go to out-dir (default ./e2e-out); exported files and the edited
- * copy of the sample go to out-dir/work.
+ * copies of the samples go to out-dir/work.
  */
 import { $ } from "bun";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { Automation } from "./automation";
 
 const root = resolve(import.meta.dir, "..");
 const out = resolve(process.argv[2] ?? join(root, "e2e-out"));
 const work = join(out, "work");
 const file = join(work, "版本说明.md");
+const superFile = join(work, "超级代码块.md");
 // Unix socket paths are limited to about 100 bytes, too few for most out dirs.
 const socket = join(tmpdir(), `dew-e2e-${process.pid}.sock`);
 
@@ -42,6 +43,7 @@ async function waitFor<T>(what: string, probe: () => Promise<T | null | undefine
 await rm(work, { recursive: true, force: true });
 await mkdir(work, { recursive: true });
 await copyFile(join(root, "samples/版本说明.md"), file);
+await copyFile(join(root, "samples/超级代码块.md"), superFile);
 const original = await readFile(file, "utf8");
 
 console.log("building…");
@@ -53,30 +55,54 @@ const ldflags = [
 ].join(" ");
 await $`go build -tags e2e -ldflags ${ldflags} -o dew-e2e .`.cwd(root);
 
-// Its own settings, reset, so every run starts in the default mode.
-await rm(join(homedir(), "Library/Application Support/DewE2E"), { recursive: true, force: true });
-await rm(socket, { force: true });
-const proc = Bun.spawn([join(root, "dew-e2e"), file], {
-  env: { ...process.env, MYGO_AUTOMATION: socket, DEW_E2E_SAVE_DIR: work },
-  stdout: "inherit",
-  stderr: "inherit",
-});
+interface Session {
+  page<T = any>(script: string): Promise<T>;
+  capture(name: string): Promise<void>;
+  menu(...path: string[]): Promise<unknown>;
+  text(selector: string): Promise<string>;
+}
 
-const app = await Automation.connect(socket);
-try {
-  const { windows } = await waitFor("a window", async () => {
-    const r = await app.request<{ windows: { id: number; title: string }[] }>("windows");
-    return r.windows.length ? r : null;
+const settle = () => Bun.sleep(450);
+
+/** Opens path in a fresh launch of the app, runs steps against its window, and quits it. */
+async function session(path: string, steps: (s: Session) => Promise<void>) {
+  // Its own settings, reset, so every run starts in the default mode.
+  await rm(join(homedir(), "Library/Application Support/DewE2E"), { recursive: true, force: true });
+  await rm(socket, { force: true });
+  const proc = Bun.spawn([join(root, "dew-e2e"), path], {
+    env: { ...process.env, MYGO_AUTOMATION: socket, DEW_E2E_SAVE_DIR: work },
+    stdout: "inherit",
+    stderr: "inherit",
   });
-  const win = windows[0]!.id;
-  const page = <T = any>(script: string) => app.eval<T>(script, win);
-  const capture = (name: string) => app.capture(join(out, `${name}.png`), win);
-  const menu = (...path: string[]) => app.request("menu", { window: win, path });
-  const text = (selector: string) => page<string>(`return document.querySelector(${JSON.stringify(selector)})?.textContent ?? ""`);
-  const content = () => page<string>(`return await mygo.call("Doc.Content")`);
-  const settle = () => Bun.sleep(450);
+  let app: Automation | undefined;
+  try {
+    app = await Automation.connect(socket);
+    const { windows } = await waitFor("a window", async () => {
+      const r = await app!.request<{ windows: { id: number; title: string }[] }>("windows");
+      return r.windows.length ? r : null;
+    });
+    const win = windows[0]!.id;
+    const page = <T = any>(script: string) => app!.eval<T>(script, win);
+    await waitFor("the page", () => page<boolean>(`return !!document.querySelector(".stat")`));
+    await steps({
+      page,
+      capture: (name) => app!.capture(join(out, `${name}.png`), win),
+      menu: (...path) => app!.request("menu", { window: win, path }),
+      text: (selector) => page<string>(`return document.querySelector(${JSON.stringify(selector)})?.textContent ?? ""`),
+    });
+  } catch (err) {
+    check(`the run on ${basename(path)} finished`, false, String(err));
+  } finally {
+    app?.close();
+    proc.kill();
+    await proc.exited;
+    await rm(socket, { force: true });
+  }
+}
 
-  await waitFor("the page", () => page<boolean>(`return !!document.querySelector(".stat")`));
+await session(file, async ({ page, capture, menu, text }) => {
+  const content = () => page<string>(`return await mygo.call("Doc.Content")`);
+
   check("the window shows the file's name and state", (await text(".gtitle")).includes("版本说明.md") && (await text(".gtitle")).includes("已保存 · 与磁盘同步"), await text(".gtitle"));
   const inset = await page<string>(`return getComputedStyle(document.documentElement).getPropertyValue("--mygo-titlebar-inset-left")`);
   check("the header leaves room for the traffic lights", parseFloat(inset) > 0, `inset ${inset.trim()}`);
@@ -192,14 +218,113 @@ try {
   await page(`[...document.querySelectorAll(".gtitle button")].find((b) => b.textContent.includes("保留我的")).click()`);
   await waitFor("keep mine", async () => (await text(".gtitle")).includes("已保存"));
   check("保留我的 writes the page's text over the other app's", (await readFile(file, "utf8")).includes("- [ ] 分栏像素级同步滚动"));
-} catch (err) {
-  check("the run finished", false, String(err));
-} finally {
-  app.close();
-  proc.kill();
-  await proc.exited;
-  await rm(socket, { force: true });
-}
+});
+
+await session(superFile, async ({ page, capture, menu }) => {
+  await menu("视图", "预览");
+  await settle();
+  // The script that finds a code block by the label in its header.
+  const block = (label: string) => `[...document.querySelectorAll("article .cb")].find((b) => b.querySelector(".cb-lang")?.textContent === ${JSON.stringify(label)})`;
+  const show = (label: string) => page(`${block(label)}.scrollIntoView({ block: "start" }); document.querySelector(".pv-scroll").scrollTop -= 80`);
+
+  const diff = await page<{ add: string; del: string; numbered: boolean }>(`
+    const b = ${block("Diff")};
+    const numbers = [...b.querySelectorAll(".dl-context")].map((r) => [...r.querySelectorAll(".dl-no")].map((n) => n.textContent));
+    return { add: b.querySelector(".df-add").textContent, del: b.querySelector(".df-del").textContent, numbered: numbers.length > 0 && numbers.every((n) => n.length === 2 && n[0] && n[1]) };
+  `);
+  check("the diff counts +4 −2 and numbers its old and new lines", diff.add === "+4" && diff.del === "−2" && diff.numbered, JSON.stringify(diff));
+  await show("Diff");
+  await settle();
+  await capture("e2e-super-diff");
+
+  const fold = () => page<{ rows: number; pill: string; meta: string; top: number }>(`
+    const b = ${block("Python")};
+    return { rows: b.querySelectorAll(".cl").length, pill: b.querySelector(".cb-pill")?.textContent ?? "", meta: b.querySelector(".cb-meta")?.textContent ?? "", top: Math.round(b.getBoundingClientRect().top) };
+  `);
+  const folded = await fold();
+  check("a long block opens on 8 of its 46 lines", folded.rows === 8 && folded.pill === "展开剩余 38 行" && folded.meta.includes("共 46 行"), JSON.stringify(folded));
+  await show("Python");
+  await settle();
+  await capture("e2e-super-folded");
+  await page(`${block("Python")}.querySelector(".cb-pill").click()`);
+  await settle();
+  const expanded = await fold();
+  check("展开剩余 shows every line", expanded.rows === 46 && expanded.pill === "收起", JSON.stringify(expanded));
+  await page(`document.querySelector(".pv-scroll").scrollTop += 600`);
+  await settle();
+  await capture("e2e-super-expanded");
+  await page(`${block("Python")}.querySelector(".cb-pill").click()`);
+  await Bun.sleep(900);
+  const collapsed = await fold();
+  check("收起 folds the block and brings its header back into view", collapsed.rows === 8 && collapsed.top >= 0, JSON.stringify(collapsed));
+
+  const chart = (label: string) => page<string>(`
+    const b = ${block(label)};
+    return b.querySelector(".dia-svg svg") ? "svg" : b.querySelector(".dia-err") ? "error: " + b.querySelector(".dia-err pre").textContent : "";
+  `);
+  for (const label of ["Mermaid", "Vega-Lite"]) {
+    const drawn = await waitFor(`the ${label} chart`, () => chart(label), 20000).catch(String);
+    check(`a ${label} fence is drawn as an SVG chart`, drawn === "svg", drawn);
+  }
+  const puml = await waitFor("the PlantUML chart", () => chart("PlantUML"), 25000).catch(String);
+  check("a PlantUML fence is drawn by plantuml.com, or says why it is not", puml === "svg" || puml.startsWith("error: "), puml === "svg" ? "rendered" : puml);
+  await show("Mermaid");
+  await settle();
+  await capture("e2e-super-mermaid");
+  await show("Vega-Lite");
+  await settle();
+  await capture("e2e-super-vega-plantuml");
+
+  const view = () => page<{ svg: boolean; rows: number }>(`const b = ${block("Mermaid")}; return { svg: !!b.querySelector(".dia-svg svg"), rows: b.querySelectorAll(".cl").length }`);
+  const toggle = (to: string) => page(`[...${block("Mermaid")}.querySelectorAll(".cb-seg button")].find((x) => x.textContent === ${JSON.stringify(to)}).click()`);
+  await toggle("源码");
+  await settle();
+  const source = await view();
+  await toggle("图表");
+  await settle();
+  const back = await view();
+  check("图表 / 源码 switches between the chart and its source", !source.svg && source.rows === 8 && back.svg && back.rows === 0, JSON.stringify({ source, back }));
+
+  await page(`[...${block("Mermaid")}.querySelectorAll(".cb-btn")].find((x) => x.textContent.includes("导出 SVG")).click()`);
+  const svgFile = join(work, "超级代码块-mermaid.svg");
+  await waitFor("the SVG", async () => existsSync(svgFile) && (await Bun.file(svgFile).size) > 0, 10000);
+  const svgHead = (await readFile(svgFile, "utf8")).slice(0, 40);
+  check("导出 SVG saves the chart", svgHead.startsWith("<svg") || svgHead.startsWith("<?xml"), `${svgHead}…, ${await Bun.file(svgFile).size} bytes`);
+
+  await page(`document.querySelector(".tbl-zoom").click()`);
+  await settle();
+  await page(`
+    const input = document.querySelector("#lbq");
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(input, "预览");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  `);
+  await settle();
+  await page(`document.querySelector("#lbq").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }))`);
+  await settle();
+  const lightbox = await page<{ label: string; meta: string; count: string; marks: number }>(`return {
+    label: document.querySelector(".lb")?.getAttribute("aria-label") ?? "",
+    meta: document.querySelector(".lb-title")?.textContent ?? "",
+    count: document.querySelector(".lb-count")?.textContent ?? "",
+    marks: document.querySelectorAll(".lb-tbl mark").length,
+  }`);
+  check("the table lightbox counts its search hits and steps through them", lightbox.label === "表格放大查看" && lightbox.meta.includes("4 列 × 8 行") && lightbox.count === "2 / 5" && lightbox.marks === 5, JSON.stringify(lightbox));
+  await capture("e2e-super-table-lightbox");
+  await page(`window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+  await settle();
+  const closed = await page<{ open: boolean; focus: string }>(`return { open: !!document.querySelector(".lb"), focus: document.activeElement?.className ?? "" }`);
+  check("Escape closes the table lightbox and returns focus to its button", !closed.open && closed.focus.includes("tbl-zoom"), JSON.stringify(closed));
+
+  await menu("文件", "导出为 PDF…");
+  const pdf = join(work, "超级代码块.pdf");
+  await waitFor("the PDF", async () => existsSync(pdf) && (await Bun.file(pdf).size) > 0, 40000);
+  await Bun.sleep(500);
+  // pdftotext spells some CJK characters as Kangxi radicals (⽂ for 文), which NFKC folds back.
+  const printed = (await $`pdftotext ${pdf} -`.text()).normalize("NFKC");
+  // Drawn charts print their labels; a chart that fell back to its source would print the fence's code.
+  const drawn = printed.includes("打开 .md 文件") && printed.includes("模式") && !printed.includes("flowchart TD") && !printed.includes("$schema");
+  check("the PDF export prints the charts, not their source", drawn, `${await Bun.file(pdf).size} bytes${printed.includes("@startuml") ? ", PlantUML as source" : ""}`);
+  await $`pdftoppm -r 60 -png ${pdf} ${join(out, "e2e-super-pdf")}`;
+});
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed; captures in ${out}`);

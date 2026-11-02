@@ -9,13 +9,20 @@ const sample = parseDocument(readFileSync(new URL("../../samples/版本说明.md
 
 test("the exported article has every block and no controls", () => {
   const html = renderArticle(sample, defaultPrefs, "white");
-  expect(html).toContain('<article class="art doc ff-sans" style="max-width:720px;font-size:16px;line-height:1.75;gap:1em">');
+  expect(html).toContain('<article class="art doc ff-sans" style="max-width:720px;font-size:16px;line-height:1.75;gap:1em;--gap:16px">');
   expect(html).toContain("版本 2.0 发布说明");
   expect(html).toContain('class="cb-lang">TypeScript');
   expect(html).toContain('<table class="tbl">');
   expect(html).toContain('class="katex"');
   expect(html).not.toContain("<button");
   expect(html).toContain('class="clp open"');
+});
+
+test("a printed export keeps each heading on the page of the block after it", () => {
+  const html = renderArticle(sample, defaultPrefs, "white", { forPrint: true });
+  expect(html).toMatch(/<div class="keep"><h2[^>]*>模式对比<\/h2><div[^>]*><div class="tbl-wrap">/);
+  expect(html.match(/class="keep"/g)).toHaveLength(4);
+  expect(renderArticle(sample, defaultPrefs, "white")).not.toContain('class="keep"');
 });
 
 test("an export draws its charts, keeps a failed one's source, colors diffs and shows long code whole", async () => {

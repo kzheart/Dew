@@ -39,7 +39,7 @@ function inlinedKatexStyles(): Promise<string> {
 /** The standalone HTML that both the HTML and the PDF export write. */
 export async function buildStandalone(doc: ParsedDocument, prefs: Prefs, title: string, bg: Prefs["bg"]): Promise<string> {
   await renderDiagrams(doc.blocks, bg);
-  const body = renderArticle(doc, prefs, bg);
+  const body = renderArticle(doc, prefs, bg, { forPrint: true });
   const css = [body.includes('class="katex') ? await inlinedKatexStyles() : "", articleCss, exportCss].join("\n");
   return standaloneDocument({ title, body, css, bg });
 }
