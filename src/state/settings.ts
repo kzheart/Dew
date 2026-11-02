@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { defaultPrefs } from "../defaultPrefs";
 import type { Prefs } from "../mygo";
 
@@ -53,7 +54,7 @@ export function isModified(prefs: Prefs, key: keyof Prefs): boolean {
   return JSON.stringify(prefs[key]) !== JSON.stringify(defaultPrefs[key]);
 }
 
-/** The glass texture a 0–10 setting picks: clear at the low end, frosted at the high end. */
-export function glassLevel(glass: number): "clear" | "default" | "frost" {
-  return glass <= 2 ? "clear" : glass >= 7 ? "frost" : "default";
+/** The 0–10 glass texture as the `--g` the glass styles scale with: clear at 0, frosted at 10. */
+export function glassStyle(glass: number): CSSProperties {
+  return { "--g": glass } as CSSProperties;
 }

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { defaultPrefs } from "../defaultPrefs";
-import { glassLevel, isModified, shownRows } from "./settings";
+import { isModified, shownRows } from "./settings";
 
 const ids = (rows: ReturnType<typeof shownRows>) => rows.map((g) => `${g.group}:${g.rows.map((r) => r.id).join(",")}`);
 
@@ -21,8 +21,4 @@ test("a row is modified when its preference differs from the defaults", () => {
   expect(isModified({ ...defaultPrefs, fs: 18 }, "fs")).toBe(true);
   expect(isModified({ ...defaultPrefs, pageGuard: { ...defaultPrefs.pageGuard } }, "pageGuard")).toBe(false);
   expect(isModified({ ...defaultPrefs, pageGuard: { ...defaultPrefs.pageGuard, image: true } }, "pageGuard")).toBe(true);
-});
-
-test("the glass setting picks clear, default or frosted", () => {
-  expect([0, 2, 3, 4, 6, 7, 10].map(glassLevel)).toEqual(["clear", "clear", "default", "default", "default", "frost", "frost"]);
 });

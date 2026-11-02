@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { host, type Command, type Prefs } from "../platform";
 import { fileName, welcomeRows } from "../state/recent";
-import { glassLevel } from "../state/settings";
+import { glassStyle } from "../state/settings";
 import { usePresence } from "./hooks";
 import { LightTable } from "./LightTable";
 import { QuickOpen } from "./QuickOpen";
@@ -39,10 +39,9 @@ export function Welcome({ prefs }: { prefs: Prefs }) {
   useEffect(() => host.onCommand((c) => onCommand.current(c)), []);
 
   const theme = prefs.bg === "night" ? " th-night" : prefs.bg === "paper" ? " th-paper" : "";
-  const glass = { clear: " gl-clear", default: "", frost: " gl-frost" }[glassLevel(prefs.glass)];
 
   return (
-    <div className={`app welcome${theme}${glass}${overlay === "table" ? " lt-on" : ""}`}>
+    <div style={glassStyle(prefs.glass)} className={`app welcome${theme}${overlay === "table" ? " lt-on" : ""}`}>
       <div className="wel-drag" aria-hidden="true" />
       <main className={`wel bg-${prefs.bg}`} aria-label="欢迎">
         <div className="wel-in">

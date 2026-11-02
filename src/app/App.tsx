@@ -16,7 +16,7 @@ import type { BlockActions, LightboxTarget } from "../preview/actions";
 import { host, type Command, type DocumentState, type FileTab, type Prefs } from "../platform";
 import { changedKeys } from "../state/prefs";
 import { fileName } from "../state/recent";
-import { glassLevel } from "../state/settings";
+import { glassStyle } from "../state/settings";
 import { modeOf, viewReducer, type ViewState } from "../state/view";
 import { Divider, StatusBar, Toc } from "./Chrome";
 import { Dock } from "./Dock";
@@ -309,10 +309,9 @@ export function App({ initial }: { initial: Initial }) {
   }, [mode, focus, prefs.inline]);
 
   const theme = showEd && !isSplit ? "" : prefs.bg === "night" ? " th-night" : prefs.bg === "paper" ? " th-paper" : "";
-  const glass = { clear: " gl-clear", default: "", frost: " gl-frost" }[glassLevel(prefs.glass)];
 
   return (
-    <div className={`app${theme}${glass}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}${setting ? " set-on" : ""}`}>
+    <div style={glassStyle(prefs.glass)} className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}${setting ? " set-on" : ""}`}>
       <main className="main">
         {showEd && (
           <section className="pane-ed" aria-label="源码编辑" style={{ flex: isSplit ? `0 0 ${split}%` : "1 1 auto" }}>
