@@ -50,6 +50,7 @@ func newDocumentWindow(doc *mygo.Document[string]) *mygo.Window {
 		BackgroundColor:      "#FFFFFF",
 		StateKey:             "document",
 	})
+	unlockFrameRate(win)
 	shareCardOnContextMenu(win)
 	return win
 }
