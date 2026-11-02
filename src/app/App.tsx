@@ -1,5 +1,6 @@
 import type { EditorView } from "@codemirror/view";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { editAssist } from "../assist/editAssist";
 import { flashLine, locateLine } from "../editor/render";
 import { SourceEditor, type Cursor } from "../editor/SourceEditor";
 import { exportDocument } from "../export/actions";
@@ -134,6 +135,8 @@ export function App({ initial }: { initial: Initial }) {
     [prefs.showLn, prefs.bg, docName, edit],
   );
 
+  const assist = useMemo(() => editAssist(), []);
+
   const { live, label: liveLabel } = useLive({
     enabled: isLive,
     doc: parsed,
@@ -141,6 +144,7 @@ export function App({ initial }: { initial: Initial }) {
     edit,
     revision: doc.revision,
     showLineNumbers: prefs.showLn,
+    assist,
     article: articleRef,
     onCaret: setCursor,
   });
@@ -209,6 +213,7 @@ export function App({ initial }: { initial: Initial }) {
               focus={focus}
               wide={!isSplit}
               initialCursor={cursor}
+              assist={assist}
               viewRef={edView}
               onChange={edit}
               onCursor={setCursor}

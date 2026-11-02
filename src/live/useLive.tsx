@@ -1,3 +1,4 @@
+import type { Extension } from "@codemirror/state";
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from "react";
 import { blockLabel } from "../app/labels";
 import { blockAtLine, type Block, type ParsedDocument } from "../markdown/parse";
@@ -18,13 +19,14 @@ interface Options {
   edit(change: (text: string) => string): void;
   revision: number;
   showLineNumbers: boolean;
+  assist: Extension;
   article: RefObject<HTMLElement | null>;
   /** The caret as a document line and column, for the source editor to pick up. */
   onCaret(cursor: Cursor): void;
 }
 
 /** Live mode: which block is being edited, and the handlers that move between blocks. */
-export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, article, onCaret }: Options) {
+export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, assist, article, onCaret }: Options) {
   const [active, setActive] = useState<Active | null>(null);
   const [cursor, setCursor] = useState({ line: 0, ch: 0 });
   // Editor events arrive between renders, so handlers read the latest values from refs.
@@ -138,6 +140,7 @@ export function useLive({ enabled, doc, text, edit, revision, showLineNumbers, a
         source={source}
         caret={active.caret}
         showLineNumbers={showLineNumbers}
+        assist={assist}
         tools={tools}
         onChange={replace}
         onExit={onExit}

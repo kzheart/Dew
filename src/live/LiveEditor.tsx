@@ -16,6 +16,8 @@ interface Props {
   source: string;
   caret: Caret;
   showLineNumbers: boolean;
+  /** Typing aids shared with the source editor; they take keys before the block's own. */
+  assist?: Extension;
   tools?: ReactNode;
   onChange(src: string): void;
   /** -1 or 1 to move to the block above or below, 0 to leave. */
@@ -93,7 +95,7 @@ function textShell(block: Block | null): { tag: string; className: string } {
 }
 
 /** The active block of live mode: its source in a small CodeMirror, in place of the rendered block. */
-export function LiveEditor({ block, source, caret, showLineNumbers, tools, onChange, onExit, onCursor }: Props) {
+export function LiveEditor({ block, source, caret, showLineNumbers, assist = [], tools, onChange, onExit, onCursor }: Props) {
   const host = useRef<HTMLElement | null>(null);
   const view = useRef<EditorView | null>(null);
   const callbacks = useRef({ onChange, onExit, onCursor });
@@ -127,6 +129,8 @@ export function LiveEditor({ block, source, caret, showLineNumbers, tools, onCha
           renderExtensions,
           tokenClasses.of(liveTokens),
           shell === "code" ? codeExtensions(showLineNumbers) : EditorView.lineWrapping,
+          // Before the block's keys, so ↑↓ and Esc reach an open menu rather than leave the block.
+          assist,
           Prec.highest(
             keymap.of([
               { key: "ArrowUp", run: (view) => atEdge(view, -1) && exit(-1) },

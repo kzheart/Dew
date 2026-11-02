@@ -1,5 +1,5 @@
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { Annotation, Compartment, EditorState } from "@codemirror/state";
+import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -28,13 +28,15 @@ interface Props {
   wide: boolean;
   /** Where the caret starts, carried over from the mode the user came from. */
   initialCursor?: Cursor | null;
+  /** Typing aids shared with the live editor; read once, when the editor is created. */
+  assist?: Extension;
   viewRef?: Ref<EditorView | null>;
   onChange(text: string): void;
   onCursor(cursor: Cursor): void;
   onScroll?(): void;
 }
 
-export function SourceEditor({ text, inline, focus, wide, initialCursor, viewRef, onChange, onCursor, onScroll }: Props) {
+export function SourceEditor({ text, inline, focus, wide, initialCursor, assist = [], viewRef, onChange, onCursor, onScroll }: Props) {
   const parent = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const inlineConf = useRef(new Compartment());
@@ -61,6 +63,7 @@ export function SourceEditor({ text, inline, focus, wide, initialCursor, viewRef
           markdownSyntax(),
           renderExtensions,
           inlineConf.current.of(inlineRender.of(inline)),
+          assist,
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
           EditorView.scrollMargins.of(() => ({ top: 84, bottom: 80 })),
           EditorView.contentAttributes.of({ "aria-label": "Markdown 源码", spellcheck: "false", autocorrect: "off", autocapitalize: "off" }),
