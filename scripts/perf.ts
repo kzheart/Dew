@@ -50,7 +50,7 @@ if (!args["no-build"]) {
   const ldflags = [
     "-X github.com/egoist/mygo.packageFileExtensions=md,markdown",
     `-X github.com/egoist/mygo.packageName=${appName}`,
-    `-X github.com/egoist/mygo.packageIdentifier=com.example.dew.e2e.${appName.toLowerCase()}`,
+    `-X github.com/egoist/mygo.packageIdentifier=me.kzheart.dew.e2e.${appName.toLowerCase()}`,
   ].join(" ");
   await $`go build -tags e2e -ldflags ${ldflags} -o dew-e2e .`.cwd(root);
 }

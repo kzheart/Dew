@@ -76,7 +76,7 @@ const appName = process.env.DEW_E2E_APP ?? "DewE2E";
 const ldflags = [
   "-X github.com/egoist/mygo.packageFileExtensions=md,markdown",
   `-X github.com/egoist/mygo.packageName=${appName}`,
-  `-X github.com/egoist/mygo.packageIdentifier=com.example.dew.e2e.${appName.toLowerCase()}`,
+  `-X github.com/egoist/mygo.packageIdentifier=me.kzheart.dew.e2e.${appName.toLowerCase()}`,
 ].join(" ");
 if (!noBuild) await $`go build -tags e2e -ldflags ${ldflags} -o dew-e2e .`.cwd(root);
 else if (!existsSync(join(root, "dew-e2e"))) throw new Error("--no-build, but there is no dew-e2e to reuse");

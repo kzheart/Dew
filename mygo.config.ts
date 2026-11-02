@@ -2,7 +2,7 @@ import { defineConfig } from "mygo-cli";
 
 export default defineConfig({
   name: "Dew",
-  identifier: "com.example.dew",
+  identifier: "me.kzheart.dew",
   version: "0.1.0",
   devUrl: "http://localhost:5173",
   devCommand: "bun run dev:web",
