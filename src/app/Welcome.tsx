@@ -12,7 +12,7 @@ type Overlay = "palette" | "table" | null;
 
 const newFile = () => void host.files.new().catch(() => {});
 
-/** The page of the window the app shows while no document is open: start a file, or find one again in the 水汽. */
+/** The page of the window the app shows while no document is open: start a file, or find a recent one again. */
 export function Welcome({ prefs }: { prefs: Prefs }) {
   const recent = useRecent();
   const rows = welcomeRows(recent, Date.now());
@@ -49,7 +49,6 @@ export function Welcome({ prefs }: { prefs: Prefs }) {
             <span className="sc tear"><span className="shell"><span className="lv"><span className="fill" /></span></span><span className="hl" /></span>
           </span>
           <h1>Dew</h1>
-          <p>新建一篇，或者从水汽里找回最近的文件。</p>
           <div className="wel-acts">
             <button className="wbtn pri" onClick={newFile}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>新建<kbd>⌘N</kbd>

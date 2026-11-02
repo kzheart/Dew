@@ -1066,6 +1066,11 @@ async function tabChecks() {
     const newShown = (await shown()).join() === String(added?.id);
     check("新建文件 in the dock opens an untitled file as a new tab, an empty tear in every dock", !!withNew && newShown, summary(withNew || (await docks())));
     if (!added) return;
+    // Its page clears from a mist where a drop lands on the first line, then leaves the page alone.
+    const cleared = await settled("the new page's mist to clear", () =>
+      s.at(added.id).page<boolean>(`return !document.querySelector("[data-condense]") && !!document.querySelector("main .art-hint, main .cm-placeholder")`),
+    );
+    check("a new file's page clears its mist and shows where to write", !!cleared, await s.at(added.id).page<string>(`return document.querySelector(".app").className`));
     await checkTitleBars("after a new file joins");
 
     const fresh = s.at(added.id);
@@ -1080,8 +1085,8 @@ async function tabChecks() {
     await fresh.menu("视图", "灯桌总览");
     await settled("the light table", () => fresh.page<boolean>(`return !!document.querySelector(".lt")`));
     await Bun.sleep(1000);
-    const table = await fresh.page<{ count: string; pages: string[]; current: string; sketched: number[]; dimmed: boolean }>(`return {
-      count: document.querySelector(".lt-count").textContent,
+    const table = await fresh.page<{ recent: boolean; pages: string[]; current: string; sketched: number[]; dimmed: boolean }>(`return {
+      recent: !!document.querySelector('section[aria-label="最近关闭的文件"]'),
       pages: [...document.querySelectorAll(".ltp")].map((p) => p.getAttribute("aria-label")),
       current: document.querySelector(".ltp.cur .ltp-lbl")?.textContent ?? "",
       sketched: [...document.querySelectorAll(".ltp .pg")].map((p) => p.children.length),
@@ -1089,7 +1094,7 @@ async function tabChecks() {
     }`);
     check(
       "视图 › 灯桌总览 lays out every file as a sketched page, the current one ringed",
-      table.count === "3 个打开 · 0 个最近" && table.pages.length === 3 && order.every((n) => table.pages.some((p) => p.startsWith(`${n}，`))) && table.current === added.title && table.sketched.every((n) => n > 0) && table.dimmed,
+      !table.recent && table.pages.length === 3 && order.every((n) => table.pages.some((p) => p.startsWith(`${n}，`))) && table.current === added.title && table.sketched.every((n) => n > 0) && table.dimmed,
       JSON.stringify(table),
     );
     await fresh.capture("e2e-tabs-light-table");
@@ -1149,7 +1154,7 @@ async function tabChecks() {
     });
     check("dragging a page onto the light table's red zone closes its file", hot.includes("hot") && !!dropped, `zone ${hot}; ${summary(dropped || (await docks()))}`);
 
-    // Closing a file leaves it in the 水汽 with how far it was read; reopening it scrolls back there.
+    // Closing a file leaves it among the recent files with how far it was read; reopening it scrolls back there.
     top = await front();
     const readName = top.win.title;
     await top.s.page(`const el = document.querySelector(".pv-scroll"); el.scrollTop = 0.5 * (el.scrollHeight - el.clientHeight)`);
@@ -1158,11 +1163,11 @@ async function tabChecks() {
     const left = await settled("the read file to close", async () => (await s.windows()).length === 1 && (await front()));
     if (!left) return check("closing a read file leaves one open", false, summary(await docks()));
     await left.s.page(`document.querySelector('.dock [aria-label="灯桌总览"]').click()`);
-    const card = await settled("its card in the 水汽", () =>
+    const card = await settled("its card among the recent files", () =>
       left.s.page<string | null>(`return [...document.querySelectorAll(".vap .rc")].map((c) => c.getAttribute("aria-label")).find((l) => l.startsWith(${JSON.stringify(`${readName}，`)})) ?? null`),
     );
-    const pill = await left.s.text(".lt-count");
-    check("a closed file lies in the light table's 水汽 under 刚刚关闭, read to 50%", !!card && card.includes("读到 50%") && pill === "1 个打开 · 1 个最近" && (await left.s.text(".vap .vlab")).startsWith("刚刚关闭"), `${card}; ${pill}`);
+    const recentCards = await left.s.page<number>(`return document.querySelectorAll('section[aria-label="最近关闭的文件"] .rc').length`);
+    check("a closed file lies in the light table's recent files under 刚刚关闭, read to 50%", !!card && card.includes("读到 50%") && recentCards === 1 && (await left.s.text(".vap .vlab")).startsWith("刚刚关闭"), `${card}; ${recentCards} shown`);
     await Bun.sleep(1200);
     await left.s.capture("e2e-tabs-vapor");
     await left.s.page(`document.querySelector(".vap .rc").click()`);
@@ -1294,7 +1299,7 @@ async function welcomeChecks() {
         return lt && cards.length ? { pages: lt.querySelectorAll(".lt-grid button").length, cards } : null;
       `),
     );
-    check("灯桌 there lays out the 水汽 alone, the file read to 50%", !!table && table.pages === 0 && table.cards.length === 1 && table.cards[0]!.includes("读到 50%"), JSON.stringify(table));
+    check("灯桌 there lays out the recent files alone, the file read to 50%", !!table && table.pages === 0 && table.cards.length === 1 && table.cards[0]!.includes("读到 50%"), JSON.stringify(table));
     await Bun.sleep(1200);
     await w.capture("e2e-welcome-light-table");
     await w.page(`[...document.querySelectorAll('[aria-label="灯桌总览"] button')].find((b) => b.textContent === "返回").click()`);

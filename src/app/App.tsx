@@ -19,6 +19,7 @@ import { fileName } from "../state/recent";
 import { glassStyle } from "../state/settings";
 import { modeOf, viewReducer, type ViewState } from "../state/view";
 import { Divider, StatusBar, Toc } from "./Chrome";
+import { Condense } from "./Condense";
 import { Dock } from "./Dock";
 import { Header, type ExportAction, type Popover } from "./Header";
 import { useDebouncedEffect, usePresence } from "./hooks";
@@ -46,6 +47,10 @@ export interface Initial {
 export function App({ initial }: { initial: Initial }) {
   const doc = useDocument(initial);
   const files = useFiles(initial.files);
+  const joined = initial.files.length > 1;
+  const [condensing, setCondensing] = useState(
+    () => joined && !initial.text && !!initial.files.find((f) => f.current)?.untitled && !matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
   const recent = useRecent();
   const [prefs, setPrefs] = useState(initial.prefs);
   const [view, dispatch] = useReducer(viewReducer, {
@@ -311,7 +316,7 @@ export function App({ initial }: { initial: Initial }) {
   const theme = showEd && !isSplit ? "" : prefs.bg === "night" ? " th-night" : prefs.bg === "paper" ? " th-paper" : "";
 
   return (
-    <div style={glassStyle(prefs.glass)} className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}${setting ? " set-on" : ""}`}>
+    <div style={glassStyle(prefs.glass)} className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}${setting ? " set-on" : ""}${joined ? " joined" : ""}${condensing ? " condensing" : ""}`}>
       <main className="main">
         {showEd && (
           <section className="pane-ed" aria-label="源码编辑" style={{ flex: isSplit ? `0 0 ${split}%` : "1 1 auto" }}>
@@ -354,6 +359,7 @@ export function App({ initial }: { initial: Initial }) {
         )}
       </main>
       <div className="edge" aria-hidden="true" />
+      {condensing && <Condense onDone={() => setCondensing(false)} />}
       <Header
         doc={doc.state}
         view={view}

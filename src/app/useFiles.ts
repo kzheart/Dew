@@ -35,7 +35,7 @@ function useMarks<T>(ms: number): [T[], (items: T[]) => void] {
 export function useFiles(initial: FileTab[]): ShownFile[] {
   const [tabs, setTabs] = useState(initial);
   const last = useRef(initial);
-  const [born, addBorn] = useMarks<number>(820);
+  const [born, addBorn] = useMarks<number>(1200);
   const [saved, addSaved] = useMarks<number>(1150);
   const [closed, addClosed] = useMarks<Closed>(320);
 
