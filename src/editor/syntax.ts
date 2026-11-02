@@ -159,13 +159,27 @@ const extensions: MarkdownConfig = {
   ],
   parseInline: [{ name: "InlineMath", parse: parseInlineMath, before: "Emphasis" }],
   parseBlock: [frontMatter, blockMath, footnoteDefinition],
-  props: [styleTags({ "CodeInfo TaskMarker": decorated, "TableHeader/...": t.content })],
+  props: [styleTags({ "CodeInfo TaskMarker CodeText": decorated, "TableHeader/...": t.content })],
 };
 
-/** Highlight classes are the prototype's tk-* token classes. */
-const highlight = HighlightStyle.define([
+const codeTokens = [
+  { tag: t.keyword, class: "tk-kw" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], class: "tk-fn" },
+  { tag: [t.typeName, t.className], class: "tk-ty" },
+  { tag: [t.string, t.regexp], class: "tk-str" },
+  { tag: [t.number, t.bool, t.null], class: "tk-num" },
+  { tag: t.comment, class: "tk-com" },
+  { tag: [t.attributeName, t.tagName], class: "tk-attr" },
+  { tag: t.meta, class: "tk-meta" },
+  { tag: fmKey, class: "tk-key" },
+  { tag: fmValue, class: "tk-num" },
+  { tag: fmPunct, class: "tk-pun" },
+];
+
+/** Source mode: the prototype's tk-* token classes. */
+const sourceHighlight = HighlightStyle.define([
   { tag: t.processingInstruction, class: "tk-mark" },
-  { tag: [t.meta, t.contentSeparator], class: "tk-meta" },
+  { tag: t.contentSeparator, class: "tk-meta" },
   { tag: t.heading, class: "tk-h" },
   { tag: t.strong, class: "tk-b" },
   { tag: t.emphasis, class: "tk-i" },
@@ -174,21 +188,27 @@ const highlight = HighlightStyle.define([
   { tag: t.quote, class: "tk-q" },
   { tag: [t.link, t.url, t.labelName], class: "tk-link" },
   { tag: mathTag, class: "tk-math" },
-  { tag: fmKey, class: "tk-key" },
-  { tag: fmValue, class: "tk-num" },
-  { tag: fmPunct, class: "tk-pun" },
-  { tag: t.keyword, class: "tk-kw" },
-  { tag: [t.function(t.variableName), t.function(t.propertyName)], class: "tk-fn" },
-  { tag: [t.typeName, t.className], class: "tk-ty" },
-  { tag: [t.string, t.regexp], class: "tk-str" },
-  { tag: [t.number, t.bool, t.null], class: "tk-num" },
-  { tag: t.comment, class: "tk-com" },
-  { tag: [t.attributeName, t.tagName], class: "tk-attr" },
+  ...codeTokens,
 ]);
 
+/** Live blocks keep the block's typography; markup shows as .mk. */
+const liveHighlight = HighlightStyle.define([
+  { tag: [t.processingInstruction, t.url, t.labelName, t.contentSeparator], class: "mk" },
+  { tag: t.strong, class: "tk-b" },
+  { tag: t.emphasis, class: "tk-i" },
+  { tag: t.strikethrough, class: "lv-del" },
+  { tag: t.monospace, class: "ic" },
+  { tag: t.link, class: "lv-a" },
+  { tag: mathTag, class: "msrc" },
+  ...codeTokens,
+]);
+
+const markdownSupport = () => markdown({ base: markdownLanguage, codeLanguages: languages, extensions });
+
 export function markdownSyntax(): Extension {
-  return [
-    markdown({ base: markdownLanguage, codeLanguages: languages, extensions }),
-    syntaxHighlighting(highlight),
-  ];
+  return [markdownSupport(), syntaxHighlighting(sourceHighlight)];
+}
+
+export function liveSyntax(): Extension {
+  return [markdownSupport(), syntaxHighlighting(liveHighlight)];
 }

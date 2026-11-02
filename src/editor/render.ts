@@ -8,6 +8,19 @@ import { toggleTask } from "../markdown/source";
 /** Whether lines away from the cursor render their markup (行内渲染). */
 export const inlineRender = Facet.define<boolean, boolean>({ combine: (v) => v.some(Boolean) });
 
+/** Classes for the tokens that decorations colour; live blocks show them all as plain marks. */
+export interface TokenClasses {
+  taskDone: string;
+  taskTodo: string;
+  calloutKind: string;
+  fenceLang: string;
+  fenceMeta: string;
+}
+
+const sourceTokens: TokenClasses = { taskDone: "tk-ok", taskTodo: "tk-todo", calloutKind: "tk-kw", fenceLang: "tk-lang", fenceMeta: "tk-attr" };
+export const liveTokens: TokenClasses = { taskDone: "mk", taskTodo: "mk", calloutKind: "mk", fenceLang: "mk", fenceMeta: "mk" };
+export const tokenClasses = Facet.define<TokenClasses, TokenClasses>({ combine: (v) => v[0] ?? sourceTokens });
+
 class LineClass extends GutterMarker {
   constructor(readonly elementClass: string) {
     super();
@@ -82,6 +95,7 @@ interface Decorations {
 function build(state: EditorState): Decorations {
   const { doc } = state;
   const inline = state.facet(inlineRender);
+  const tk = state.facet(tokenClasses);
   const sel = state.selection.main;
   const curFrom = doc.lineAt(sel.from).number;
   const curTo = doc.lineAt(sel.to).number;
@@ -132,13 +146,13 @@ function build(state: EditorState): Decorations {
         case "Image":
           return false;
         case "FencedCode":
-          fenceInfo(node, ranges, state);
+          fenceInfo(node, ranges, state, tk);
           return false;
         case "Paragraph":
           setLines(node.from, node.to, "lv-p");
           return;
         case "Blockquote":
-          callout(node, state, rendered, ranges, calloutLines);
+          callout(node, state, rendered, ranges, calloutLines, tk);
           return;
         case "QuoteMark":
           if (rendered(node.from) && !calloutLines.has(doc.lineAt(node.from).number)) {
@@ -146,7 +160,7 @@ function build(state: EditorState): Decorations {
           }
           return;
         case "TaskMarker":
-          task(node, state, rendered(node.from), ranges, setLines);
+          task(node, state, rendered(node.from), ranges, setLines, tk);
           return;
         case "EmphasisMark":
         case "StrikethroughMark":
@@ -169,13 +183,13 @@ function build(state: EditorState): Decorations {
   return { content: Decoration.set(ranges, true), gutter: RangeSet.of(gutter, true) };
 }
 
-function fenceInfo(node: SyntaxNode, ranges: Range<Decoration>[], state: EditorState) {
+function fenceInfo(node: SyntaxNode, ranges: Range<Decoration>[], state: EditorState, tk: TokenClasses) {
   const info = node.getChild("CodeInfo");
   if (!info) return;
   const text = state.doc.sliceString(info.from, info.to);
   const lang = /^\S*/.exec(text)![0].length;
-  if (lang) ranges.push(mark("tk-lang").range(info.from, info.from + lang));
-  if (lang < text.length) ranges.push(mark("tk-attr").range(info.from + lang, info.to));
+  if (lang) ranges.push(mark(tk.fenceLang).range(info.from, info.from + lang));
+  if (lang < text.length) ranges.push(mark(tk.fenceMeta).range(info.from + lang, info.to));
 }
 
 function callout(
@@ -184,6 +198,7 @@ function callout(
   rendered: (pos: number) => boolean,
   ranges: Range<Decoration>[],
   calloutLines: Set<number>,
+  tk: TokenClasses,
 ) {
   const line = state.doc.lineAt(node.from);
   const m = CALLOUT.exec(line.text);
@@ -195,7 +210,7 @@ function callout(
     const title = m[4]!.trim() || calloutTitles[kind as keyof typeof calloutTitles] || m[2]!;
     ranges.push(Decoration.replace({ widget: new CalloutLabel(title) }).range(line.from, line.to));
   } else {
-    ranges.push(mark("tk-kw").range(start, start + m[2]!.length + 3));
+    ranges.push(mark(tk.calloutKind).range(start, start + m[2]!.length + 3));
   }
 }
 
@@ -205,12 +220,13 @@ function task(
   rendered: boolean,
   ranges: Range<Decoration>[],
   setLines: (from: number, to: number, cls: string) => void,
+  tk: TokenClasses,
 ) {
   const checked = /x/i.test(state.doc.sliceString(node.from, node.to));
   const item = node.parent?.parent;
   const bullet = item?.firstChild;
   if (!rendered || !item || bullet?.name !== "ListMark") {
-    ranges.push(mark(checked ? "tk-ok" : "tk-todo").range(node.from, node.to));
+    ranges.push(mark(checked ? tk.taskDone : tk.taskTodo).range(node.from, node.to));
     return;
   }
   const line = state.doc.lineAt(node.from);

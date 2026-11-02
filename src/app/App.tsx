@@ -2,6 +2,7 @@ import type { EditorView } from "@codemirror/view";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { flashLine, locateLine } from "../editor/render";
 import { SourceEditor, type Cursor } from "../editor/SourceEditor";
+import { useLive } from "../live/useLive";
 import { parseDocument } from "../markdown/parse";
 import { toggleTask } from "../markdown/source";
 import { Article } from "../preview/Article";
@@ -49,6 +50,7 @@ export function App({ initial }: { initial: Initial }) {
   useDebouncedEffect({ ...prefs, base: view.base, source: sourcePref }, 300, (p) => void host.prefs.set(p).catch(() => {}));
 
   const pvRef = useRef<HTMLDivElement>(null);
+  const articleRef = useRef<HTMLElement>(null);
   const sync = useScrollSync(edView, pvRef, isSplit);
   const lastY = useRef<Record<string, number>>({});
   const trackScroll = (el: HTMLElement, key: string) => {
@@ -110,6 +112,16 @@ export function App({ initial }: { initial: Initial }) {
     }),
     [prefs.showLn, edit],
   );
+
+  const { live, label: liveLabel } = useLive({
+    enabled: isLive,
+    doc: parsed,
+    text: doc.text,
+    edit,
+    revision: doc.revision,
+    showLineNumbers: prefs.showLn,
+    article: articleRef,
+  });
 
   const runExport = (_a: ExportAction) => {};
 
@@ -192,7 +204,7 @@ export function App({ initial }: { initial: Initial }) {
                 sync.fromPreview();
               }}
             >
-              <Article doc={parsed} typography={prefs} focus={focus} actions={actions} onLocate={locate} />
+              <Article doc={parsed} typography={prefs} focus={focus} actions={actions} live={live} onLocate={locate} articleRef={articleRef} />
             </div>
             <Toc headings={parsed.headings} active={toc.line} pct={toc.pct} onJump={jump} />
           </section>
@@ -217,7 +229,7 @@ export function App({ initial }: { initial: Initial }) {
         onKeepMine={() => void host.doc.keepMine().catch(() => {})}
         onRevert={() => void host.doc.revert().catch(() => {})}
       />
-      <StatusBar chars={parsed.stats.chars} minutes={parsed.stats.minutes} mode={mode} cursor={cursor} blockLabel={null} />
+      <StatusBar chars={parsed.stats.chars} minutes={parsed.stats.minutes} mode={mode} cursor={cursor} blockLabel={liveLabel} />
     </div>
   );
 }

@@ -9,7 +9,8 @@ export type Typography = Pick<Prefs, "mw" | "fs" | "lh" | "pg" | "ff">;
 export interface LiveEditing {
   range: LineRange | null;
   editor: ReactNode;
-  onActivate(block: Block, e: MouseEvent): void;
+  /** block is null for a click on no block, which only an empty document acts on. */
+  onActivate(block: Block | null, e: MouseEvent): void;
   onKeyDown(e: KeyboardEvent<HTMLElement>): void;
 }
 
@@ -52,7 +53,7 @@ export const Article = memo(function Article({ doc, typography, focus, actions, 
           if (!live) return;
           const el = blockOf(e);
           const block = el && doc.blocks.find((b) => b.start === Number(el.dataset.src));
-          if (block) live.onActivate(block, e);
+          live.onActivate(block ?? null, e);
         }}
         onKeyDown={live?.onKeyDown}
         onChange={(e) => {

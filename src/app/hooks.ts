@@ -29,17 +29,18 @@ export function useTransient<T>(ms: number): [T | null, (v: T) => void] {
   ];
 }
 
-/** Calls fn after the value stops changing for ms. */
+/** Calls fn after the value, compared as JSON, stops changing for ms. */
 export function useDebouncedEffect<T>(value: T, ms: number, fn: (v: T) => void) {
   const first = useRef(true);
-  const latest = useRef(fn);
-  latest.current = fn;
+  const latest = useRef({ fn, value });
+  latest.current = { fn, value };
+  const key = JSON.stringify(value);
   useEffect(() => {
     if (first.current) {
       first.current = false;
       return;
     }
-    const t = setTimeout(() => latest.current(value), ms);
+    const t = setTimeout(() => latest.current.fn(latest.current.value), ms);
     return () => clearTimeout(t);
-  }, [value, ms]);
+  }, [key, ms]);
 }
