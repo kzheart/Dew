@@ -9,12 +9,22 @@ export interface RenderEnv extends Env {
   mathml?: boolean;
 }
 
+const MATH_CACHE_SIZE = 2000;
+const mathCache = new Map<string, string>();
+
+/** Every keystroke re-renders the whole document, so formulas are typeset once and reused by source. */
 export function renderMath(tex: string, displayMode: boolean, env: RenderEnv): string {
-  return katex.renderToString(tex, {
-    displayMode,
-    throwOnError: false,
-    output: env.mathml ? "mathml" : "htmlAndMathml",
-  });
+  const output = env.mathml ? "mathml" : "htmlAndMathml";
+  const key = `${output}${displayMode ? "D" : "I"}${tex}`;
+  let html = mathCache.get(key);
+  if (html === undefined) {
+    html = katex.renderToString(tex, { displayMode, throwOnError: false, output });
+    if (mathCache.size >= MATH_CACHE_SIZE) mathCache.delete(mathCache.keys().next().value!);
+  } else {
+    mathCache.delete(key);
+  }
+  mathCache.set(key, html);
+  return html;
 }
 
 const isSpace = (c: number | undefined) => c === 0x20 || c === 0x09 || c === 0x0a;

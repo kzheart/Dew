@@ -1,15 +1,15 @@
 import type { EditorView } from "@codemirror/view";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { editAssist } from "../assist/editAssist";
 import { encodeImage } from "../assist/image";
 import { flashLine, locateLine } from "../editor/render";
 import { SourceEditor, type Cursor } from "../editor/SourceEditor";
-import { exportDocument } from "../export/actions";
 import type { CardContent } from "../export/card";
 import { selectedCard } from "../export/selection";
-import { baseName } from "../export/standalone";
+import { baseName } from "../export/names";
 import { useLive } from "../live/useLive";
-import { parseDocument } from "../markdown/parse";
+import { parseDocument, type ParsedDocument } from "../markdown/parse";
+import { reuseUnchanged } from "../markdown/reuse";
 import { toggleTask } from "../markdown/source";
 import { Article } from "../preview/Article";
 import type { BlockActions, LightboxTarget } from "../preview/actions";
@@ -68,12 +68,20 @@ export function App({ initial }: { initial: Initial }) {
     setOverview(true);
   };
 
-  const parsed = useMemo(() => parseDocument(doc.text, { resolveImage: host.imageURL }), [doc.text]);
-
   const showEd = mode === "edit" || mode === "split";
   const showPv = mode !== "edit";
   const isLive = mode === "live";
   const isSplit = mode === "split";
+
+  // CodeMirror paints the keystroke itself, so outside live mode the preview may trail it by a render.
+  // Live mode edits blocks by their line ranges and needs them current.
+  const deferredText = useDeferredValue(doc.text);
+  const parseText = isLive ? doc.text : deferredText;
+  const lastParsed = useRef<ParsedDocument | null>(null);
+  const parsed = useMemo(
+    () => (lastParsed.current = reuseUnchanged(lastParsed.current, parseDocument(parseText, { resolveImage: host.imageURL }))),
+    [parseText],
+  );
 
   const updatePrefs = useCallback((p: Partial<Prefs>) => setPrefs((old) => ({ ...old, ...p })), []);
   const sourcePref: Prefs["source"] = view.source ?? "off";
@@ -188,11 +196,16 @@ export function App({ initial }: { initial: Initial }) {
 
   const runExport = (action: ExportAction) => {
     if (action === "shareCard") {
-      setCard(selectedCard({ doc: parsed, text: doc.text, fileName: docName, editor: edView.current }));
+      const current = parseText === doc.text ? parsed : parseDocument(doc.text, { resolveImage: host.imageURL });
+      setCard(selectedCard({ doc: current, text: doc.text, fileName: docName, editor: edView.current }));
       return;
     }
     const source = { text: doc.text, fileName: docName, prefs, resolveImage: host.imageURL };
-    void doc.flush().then(() => exportDocument(action, source)).catch((e) => console.error("export failed", e));
+    void doc
+      .flush()
+      .then(() => import("../export/actions"))
+      .then(({ exportDocument }) => exportDocument(action, source))
+      .catch((e) => console.error("export failed", e));
   };
 
   const onCommand = useRef<(c: Command) => void>(() => {});

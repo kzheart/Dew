@@ -5,7 +5,8 @@ import { host, type Prefs } from "../platform";
 import { buildStandalone } from "./build";
 import { embeddingImages } from "./images";
 import { inlineStyled } from "./richText";
-import { baseName, documentTitle, renderArticle } from "./standalone";
+import { baseName, documentTitle } from "./names";
+import { renderArticle } from "./standalone";
 
 interface Source {
   text: string;

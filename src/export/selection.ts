@@ -3,7 +3,7 @@ import { languageLabel } from "../markdown/highlight";
 import { parseDocument, type Block, type ParsedDocument } from "../markdown/parse";
 import type { CodeBlock } from "../preview/actions";
 import { tidyCode, type CardContent } from "./card";
-import { documentTitle } from "./standalone";
+import { documentTitle } from "./names";
 
 /** Rendered parts that are not the passage itself: footnote markers, MathML twins, line numbers, controls. */
 const NOT_TEXT = ".fn-ref,.katex-mathml,.cb-ln,.dl-no,button,input";

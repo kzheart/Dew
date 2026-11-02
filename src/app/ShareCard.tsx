@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CARD_BACKGROUNDS, cardSwatch, drawShareCard, renderCard, type CardContent } from "../export/card";
-import { baseName } from "../export/standalone";
+import { baseName } from "../export/names";
 import { host, type CardBackground, type Prefs } from "../platform";
 import { useTransient } from "./hooks";
 

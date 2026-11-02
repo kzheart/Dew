@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { defaultPrefs } from "../defaultPrefs";
 import { engines, renderDiagrams } from "../diagram/engines";
 import { parseDocument } from "../markdown/parse";
-import { baseName, documentTitle, keepHeadingsWithNext, pageUnits, pdfScript, renderArticle, standaloneDocument } from "./standalone";
+import { baseName, documentTitle } from "./names";
+import { keepHeadingsWithNext, pageUnits, pdfScript, renderArticle, standaloneDocument } from "./standalone";
 
 const sample = parseDocument(readFileSync(new URL("../../samples/版本说明.md", import.meta.url), "utf8"));
 
