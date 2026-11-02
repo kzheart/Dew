@@ -1,66 +1,52 @@
 package main
 
 import (
+	"io"
 	"log"
-	"runtime"
-	"time"
 
 	"github.com/egoist/mygo"
+
+	_ "dew/locales"
 )
 
-// Greeter is callable from the frontend: `mygo generate` turns its methods
-// into typed TypeScript functions in src/mygo.ts.
-type Greeter struct{}
-
-// Greet returns a greeting for name.
-func (Greeter) Greet(name string) string {
-	if name == "" {
-		name = "stranger"
-	}
-	return "Hello, " + name + "! This message comes from Go."
-}
-
-// SystemInfo describes the machine the app runs on.
-type SystemInfo struct {
-	OS        string `json:"os"`
-	Arch      string `json:"arch"`
-	GoVersion string `json:"goVersion"`
-}
-
-// Info returns information about the system.
-func (Greeter) Info() SystemInfo {
-	return SystemInfo{OS: runtime.GOOS, Arch: runtime.GOARCH, GoVersion: runtime.Version()}
-}
-
-// Tick is sent to the page every second.
-var Tick = mygo.NewEvent[time.Time]("tick")
-
 func main() {
-	mygo.Bind(Greeter{})
-
-	mygo.App.WhenReady(func() {
-		win := mygo.NewWindow(mygo.WindowOptions{
-			Title:           "Dew",
-			Width:           960,
-			Height:          640,
-			MinWidth:        480,
-			MinHeight:       360,
-			BackgroundColor: "light-dark(#f6f7f9, #0f1115)", // the page's --bg in src/style.css
-			// Opens where the user left it last time.
-			StateKey: "main",
-			// The frontend: devUrl during `mygo dev`, frontendDist
-			// embedded by `mygo build` otherwise (see mygo.json).
-			URL: "/",
-		})
-		go func() {
-			for t := range time.Tick(time.Second) {
-				if Tick.Emit(win, t) != nil {
-					return // the window was closed
-				}
-			}
-		}()
+	docs := mygo.NewDocuments(mygo.DocumentsOptions[string]{
+		Types: []mygo.DocumentType{{Name: "Markdown 文稿", Extensions: []string{"md", "markdown"}}},
+		Read: func(r io.Reader) (string, error) {
+			b, err := io.ReadAll(r)
+			return string(b), err
+		},
+		Write: func(w io.Writer, text string) error {
+			_, err := io.WriteString(w, text)
+			return err
+		},
+		Equal:  func(a, b string) bool { return a == b },
+		Window: newDocumentWindow,
 	})
+
+	mygo.BindAs("Doc", docs.Service())
+	mygo.BindAs("Conflict", &conflictService{docs: docs})
+	mygo.BindAs("Prefs", &prefsStore{})
+	mygo.BindAs("Export", exportService{})
+	mygo.BindAs("View", &viewService{})
+	serveDocumentFiles()
+
+	mygo.App.WhenReady(func() { mygo.App.SetMenu(newMenuBar()) })
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func newDocumentWindow(doc *mygo.Document[string]) *mygo.Window {
+	return mygo.NewWindow(mygo.WindowOptions{
+		URL:                  "/",
+		Width:                1280,
+		Height:               820,
+		MinWidth:             600,
+		MinHeight:            420,
+		TitleBarStyle:        mygo.TitleBarHiddenInset,
+		TrafficLightPosition: &mygo.Point{X: 20, Y: 24},
+		BackgroundColor:      "#FFFFFF",
+		StateKey:             "document",
+	})
 }

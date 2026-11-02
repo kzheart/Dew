@@ -4,27 +4,208 @@ import { call, event } from "mygo-runtime";
 
 // ---- Types ----
 
-/** SystemInfo describes the machine the app runs on. */
-export interface SystemInfo {
-  os: string;
-  arch: string;
-  goVersion: string;
+/** Background is the paper the rendered document sits on. */
+export type Background = "white" | "paper" | "night";
+
+/** BaseMode is the rendered view the segmented control picks. */
+export type BaseMode = "live" | "preview";
+
+/** Command is a menu command that the focused window's page carries out. */
+export type Command = "save" | "live" | "preview" | "source" | "split" | "focus" | "inline" | "exportPDF" | "exportHTML" | "copyRichText" | "shareCard";
+
+/**
+ * DocumentState describes a document, as Document.State returns it and
+ * pages of its window get it.
+ */
+export interface DocumentState {
+  /**
+   * Name is the document's file name, or a name such as "Untitled 2"
+   * for an untitled document.
+   */
+  name: string;
+  /** Path is the document's file, "" while it is untitled. */
+  path: string;
+  /** Edited reports whether the document has unsaved changes. */
+  edited: boolean;
+  /**
+   * ReadOnly reports that the document's file can't be written: saving
+   * asks for another file.
+   */
+  readOnly: boolean;
+  /**
+   * Conflict reports that another app changed the document's file while
+   * the document had unsaved changes: saving asks which to keep.
+   */
+  conflict: boolean;
+  /**
+   * Deleted reports that the document's file was deleted: saving
+   * writes it again.
+   */
+  deleted: boolean;
+}
+
+/** Font is the typeface family of the rendered document. */
+export type Font = "serif" | "sans" | "mono";
+
+/** Mode is the view a window shows. */
+export type Mode = "live" | "preview" | "edit" | "split";
+
+/** Prefs are the reading and view preferences new windows start with. */
+export interface Prefs {
+  mw: number;
+  fs: number;
+  lh: number;
+  pg: number;
+  ff: Font;
+  bg: Background;
+  base: BaseMode;
+  source: SourceLayout;
+  inline: boolean;
+  showLn: boolean;
+}
+
+/** SourceLayout is how the Markdown source shows, if at all. */
+export type SourceLayout = "off" | "full" | "split";
+
+/** ViewState is what the View menu's check marks show for a window. */
+export interface ViewState {
+  mode: Mode;
+  focus: boolean;
+  inline: boolean;
 }
 
 // ---- Services ----
 
 /**
- * Greeter is callable from the frontend: `mygo generate` turns its methods
- * into typed TypeScript functions in src/mygo.ts.
+ * DocumentService gives the pages of document windows their documents,
+ * through the generated TypeScript client: bind it with BindAs, under the
+ * name the client calls it by,
+ *
+ * 	mygo.BindAs("Note", notes.Service())
+ *
+ * and a page reads and replaces the content of the document its window
+ * shows, and saves it:
+ *
+ * 	const text = await Note.content();
+ * 	await Note.setContent(text + "!");
+ * 	onDocumentState((state) => { title.textContent = state.name }); // mygo-runtime
+ *
+ * Its methods fail for windows that show no document of its kind.
  */
-export const Greeter = {
-  /** Greet returns a greeting for name. */
-  greet(name: string): Promise<string> {
-    return call("Greeter.Greet", name);
+export const Doc = {
+  /** Content returns the content of the window's document. */
+  content(): Promise<string> {
+    return call("Doc.Content");
   },
-  /** Info returns information about the system. */
-  info(): Promise<SystemInfo> {
-    return call("Greeter.Info");
+  /** Duplicate opens a copy of the window's document in a new window. */
+  duplicate(): Promise<void> {
+    return call("Doc.Duplicate");
+  },
+  /** MoveTo asks where to move the window's document's file. */
+  moveTo(): Promise<void> {
+    return call("Doc.MoveTo");
+  },
+  /** Rename asks for a new name of the window's document's file. */
+  rename(): Promise<void> {
+    return call("Doc.Rename");
+  },
+  /**
+   * Revert asks whether to discard the unsaved changes of the window's
+   * document, and reads its file again.
+   */
+  revert(): Promise<void> {
+    return call("Doc.Revert");
+  },
+  /** Save saves the window's document, as File > Save does. */
+  save(): Promise<void> {
+    return call("Doc.Save");
+  },
+  /** SaveAs asks where to save the window's document, and saves it there. */
+  saveAs(): Promise<void> {
+    return call("Doc.SaveAs");
+  },
+  /**
+   * SetContent replaces the content of the window's document, which edits
+   * it.
+   */
+  setContent(content: string): Promise<void> {
+    return call("Doc.SetContent", content);
+  },
+  /**
+   * State describes the window's document; onDocumentState of mygo-runtime
+   * tells its changes.
+   */
+  state(): Promise<DocumentState> {
+    return call("Doc.State");
+  },
+} as const;
+
+/**
+ * conflictService resolves a document whose file another app changed while
+ * it had unsaved changes. Reverting is Doc.revert.
+ */
+export const Conflict = {
+  /** KeepMine writes the window's document over the file another app changed. */
+  keepMine(): Promise<void> {
+    return call("Conflict.KeepMine");
+  },
+} as const;
+
+/**
+ * prefsStore keeps Prefs in prefs.json of the user data directory, shared
+ * by the dev server's origin and the built app's.
+ */
+export const Prefs = {
+  /** Get returns the saved preferences, or the defaults. */
+  get(): Promise<Prefs> {
+    return call("Prefs.Get");
+  },
+  /** Set saves the preferences. */
+  set(p: Prefs): Promise<void> {
+    return call("Prefs.Set", p);
+  },
+} as const;
+
+/**
+ * exportService writes what the page renders of its document to other
+ * files and to the clipboard.
+ */
+export const Export = {
+  /** HTML saves a standalone HTML document where the user chooses. */
+  html(html: string, name: string): Promise<string> {
+    return call("Export.HTML", html, name);
+  },
+  /**
+   * PDF prints a standalone HTML document on A4 pages and saves the PDF where
+   * the user chooses. It returns the path, or "" when the user canceled.
+   */
+  pdf(html: string, name: string): Promise<string> {
+    return call("Export.PDF", html, name);
+  },
+  /**
+   * RichText puts styled HTML on the clipboard, with its plain text for
+   * apps that take no HTML.
+   */
+  richText(html: string, text: string): Promise<void> {
+    return call("Export.RichText", html, text);
+  },
+  /**
+   * ShareCard copies a PNG image to the clipboard and saves it where the
+   * user chooses.
+   */
+  shareCard(png: string, name: string): Promise<string> {
+    return call("Export.ShareCard", png, name);
+  },
+} as const;
+
+/** viewService lets pages put their view state into the View menu. */
+export const View = {
+  /**
+   * Sync shows the calling window's view state in the View menu while that
+   * window is focused.
+   */
+  sync(s: ViewState): Promise<void> {
+    return call("View.Sync", s);
   },
 } as const;
 
@@ -32,6 +213,6 @@ export const Greeter = {
 
 /** Events sent by the Go side. Subscribe with `events.name.on(listener)`. */
 export const events = {
-  /** Tick is sent to the page every second. */
-  tick: event<string>("tick"),
+  /** Commands carries menu commands to the page of the focused window. */
+  command: event<Command>("command"),
 } as const;

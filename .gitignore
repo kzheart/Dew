@@ -6,3 +6,5 @@ mygo_windows_*.syso
 
 /prototype/
 *.zip
+/dew
+/dew-e2e
