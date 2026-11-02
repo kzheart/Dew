@@ -123,11 +123,18 @@ function Callout({ block }: { block: Extract<Block, { kind: "callout" }> }) {
   const shown = open || !interactive;
   return (
     <div {...attrs(block, `callout callout-${block.variant}`)}>
-      <button className="callout-h" aria-expanded={shown} onClick={() => interactive && setOpen(!open)}>
-        {calloutIcons[block.variant]}
-        <span>{block.title}</span>
-        {interactive && <Chevron size={15} weight={2} className={open ? "chev open" : "chev"} style={{ marginLeft: "auto" }} />}
-      </button>
+      {interactive ? (
+        <button className="callout-h" aria-expanded={shown} onClick={() => setOpen(!open)}>
+          {calloutIcons[block.variant]}
+          <span>{block.title}</span>
+          <Chevron size={15} weight={2} className={open ? "chev open" : "chev"} style={{ marginLeft: "auto" }} />
+        </button>
+      ) : (
+        <div className="callout-h">
+          {calloutIcons[block.variant]}
+          <span>{block.title}</span>
+        </div>
+      )}
       <div className={shown ? "clp open" : "clp"}>
         <div>
           <div className="callout-b" dangerouslySetInnerHTML={html(block.html)} />

@@ -97,7 +97,6 @@ input[type=range]{width:100%;accent-color:#0A66D8;margin:0;height:22px}
 .pane-ed{min-width:0;display:flex;flex-direction:column;background:#FFFFFF}
 .pane-pv{flex:1 1 0;min-width:0;position:relative;display:flex}
 .pv-scroll{flex:1 1 auto;overflow:auto;position:relative;padding:92px clamp(20px,6%,80px) 200px}
-.art.doc{margin:0 auto;display:flex;flex-direction:column}
 
 /* The source editor: CodeMirror styled as the prototype's .ed rows. */
 .ed{flex:1 1 auto;min-height:0;position:relative;font-family:'SF Mono',Menlo,'JetBrains Mono','PingFang SC',ui-monospace,monospace;font-size:13px;line-height:24px;cursor:text}

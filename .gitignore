@@ -9,3 +9,4 @@ mygo_windows_*.syso
 /dew
 /dew-e2e
 /.playwright-cli
+/e2e-out

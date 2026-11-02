@@ -4,6 +4,8 @@
 .bg-white{background:#FFFFFF;color:#1D1D1F}
 .bg-paper{background:#F4ECDA;color:#3A2E20}
 .bg-night{background:#1E1E20;color:#DCDCE0}
+/* Typography values (max-width, size, line height, gap) come inline from the prefs. */
+.art.doc{margin:0 auto;display:flex;flex-direction:column}
 .art{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Noto Sans SC',sans-serif;outline:none;-webkit-font-smoothing:antialiased}
 .art.ff-serif{font-family:'Songti SC','Noto Serif SC',Georgia,serif}
 .art.ff-mono{font-family:'SF Mono',Menlo,'JetBrains Mono','PingFang SC',monospace}

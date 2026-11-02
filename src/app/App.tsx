@@ -2,6 +2,7 @@ import type { EditorView } from "@codemirror/view";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { flashLine, locateLine } from "../editor/render";
 import { SourceEditor, type Cursor } from "../editor/SourceEditor";
+import { exportDocument } from "../export/actions";
 import { useLive } from "../live/useLive";
 import { parseDocument } from "../markdown/parse";
 import { toggleTask } from "../markdown/source";
@@ -123,7 +124,11 @@ export function App({ initial }: { initial: Initial }) {
     article: articleRef,
   });
 
-  const runExport = (_a: ExportAction) => {};
+  const runExport = (action: ExportAction) => {
+    if (action === "shareCard") return;
+    const source = { text: doc.text, fileName: doc.state.name, prefs, resolveImage: (src: string) => resolveImage(src, dir) };
+    void doc.flush().then(() => exportDocument(action, source)).catch((e) => console.error("export failed", e));
+  };
 
   const onCommand = useRef<(c: Command) => void>(() => {});
   onCommand.current = (c) => {
