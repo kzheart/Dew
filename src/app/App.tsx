@@ -12,6 +12,7 @@ import { parseDocument, type ParsedDocument } from "../markdown/parse";
 import { reuseUnchanged } from "../markdown/reuse";
 import { toggleTask } from "../markdown/source";
 import { Article } from "../preview/Article";
+import { playEntrance } from "../preview/entrance";
 import type { BlockActions, LightboxTarget } from "../preview/actions";
 import { host, type Command, type DocumentState, type FileTab, type Handoff, type Prefs } from "../platform";
 import { fileName } from "../state/recent";
@@ -129,6 +130,7 @@ export function App({ initial }: { initial: Initial }) {
     const from = prevMode.current;
     if (from === mode || !showPv) return;
     if (from === "edit" || from === "split" || mode === "split") sync.restore("preview");
+    if (!isSplit && pvRef.current) playEntrance(pvRef.current);
   }, [mode]);
   useEffect(() => {
     const from = prevMode.current;
@@ -169,7 +171,28 @@ export function App({ initial }: { initial: Initial }) {
   const jump = (line: number) => {
     const pv = pvRef.current;
     const h = pv?.querySelector<HTMLElement>(`[data-sec="h-${line}"]`);
-    if (pv && h) pv.scrollTo({ top: Math.max(0, h.offsetTop - 100), behavior: "smooth" });
+    if (!pv || !h) return;
+    const target = () => Math.max(0, h.offsetTop - 100);
+    pv.scrollTo({ top: target(), behavior: "smooth" });
+    // Blocks passed on the way take their real heights, which moves the heading: land on it again.
+    let idle: ReturnType<typeof setTimeout>;
+    const done = () => {
+      clearTimeout(idle);
+      pv.removeEventListener("scroll", settle);
+      for (const t of takeover) pv.removeEventListener(t, done);
+    };
+    const settle = () => {
+      clearTimeout(idle);
+      idle = setTimeout(() => {
+        done();
+        if (Math.abs(pv.scrollTop - target()) > 2) pv.scrollTo({ top: target() });
+      }, 150);
+    };
+    // The reader scrolling on their own takes over.
+    const takeover = ["wheel", "pointerdown", "keydown"] as const;
+    for (const t of takeover) pv.addEventListener(t, done);
+    pv.addEventListener("scroll", settle);
+    settle();
   };
 
   const pendingLocate = useRef<number | null>(null);
@@ -338,25 +361,25 @@ export function App({ initial }: { initial: Initial }) {
           </section>
         )}
         {isSplit && <Divider split={split} onSplit={setSplit} />}
-        {showPv && (
-          <section className={`pv pane-pv bg-${prefs.bg}`} aria-label={isLive ? "实时编辑" : "预览"}>
-            <div
-              className="pv-scroll"
-              ref={pvRef}
-              onScroll={(e) => {
-                trackScroll(e.currentTarget, "p");
-                updateToc();
-                sync.fromPreview(isSplit);
-              }}
-              onClick={(e) => {
-                if (e.target === e.currentTarget && live && window.getSelection()?.isCollapsed !== false) live.onBlank();
-              }}
-            >
-              <Article doc={parsed} typography={prefs} focus={focus} actions={actions} live={live} onLocate={locate} articleRef={articleRef} />
-            </div>
-            <Toc headings={parsed.headings} active={toc.line} pct={toc.pct} onJump={jump} />
-          </section>
-        )}
+        {/* Hidden rather than unmounted behind the full source: WebKit lays a remounted article out
+            from cold, which took hundreds of milliseconds every time the preview came back. */}
+        <section className={`pv pane-pv bg-${prefs.bg}${showPv ? "" : " pv-off"}`} aria-label={isLive ? "实时编辑" : "预览"} aria-hidden={!showPv} inert={!showPv}>
+          <div
+            className="pv-scroll"
+            ref={pvRef}
+            onScroll={(e) => {
+              trackScroll(e.currentTarget, "p");
+              updateToc();
+              sync.fromPreview(isSplit);
+            }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget && live && window.getSelection()?.isCollapsed !== false) live.onBlank();
+            }}
+          >
+            <Article doc={parsed} typography={prefs} focus={focus} actions={actions} live={live} onLocate={locate} articleRef={articleRef} />
+          </div>
+          <Toc headings={parsed.headings} active={toc.line} pct={toc.pct} onJump={jump} />
+        </section>
       </main>
       <div className="edge" aria-hidden="true" />
       <Veil part={initial.part} />

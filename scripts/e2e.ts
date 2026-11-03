@@ -1131,7 +1131,7 @@ async function tabChecks() {
     check("the page left for a new file is under its mist as its window goes", leftUnder === "covered", `its mist was ${leftUnder}`);
     check("a new file's page clears its mist and shows where to write", !!cleared, await s.at(added.id).page<string>(`return document.querySelector(".app").className`));
     // Its entrance waits under the mist and plays as it clears: one that starts later restarted.
-    const entrances = `return document.getAnimations().filter((a) => /^(paneIn|artA|artB|edIn|actGlow)$/.test(a.animationName) && (a.currentTime ?? 0) < 300).map((a) => a.animationName + " at " + Math.round(a.currentTime ?? 0))`;
+    const entrances = `return document.getAnimations().filter((a) => /^(paneIn|edIn|edSlide|actGlow)$/.test(a.animationName) && (a.currentTime ?? 0) < 300).map((a) => a.animationName + " at " + Math.round(a.currentTime ?? 0))`;
     const replayed: string[] = [];
     for (let i = 0; i < 4; i++) {
       replayed.push(...(await s.at(added.id).page<string[]>(entrances)));
@@ -1247,11 +1247,12 @@ async function tabChecks() {
     await left.s.capture("e2e-tabs-vapor");
     await left.s.page(`document.querySelector(".vap .rc").click()`);
     // The file opens in whichever view new windows start in; the restore follows that view's scroller.
+    // The preview stays mounted, hidden, behind the full source, so only a shown one counts.
     let last: number | null = null;
     const back = await settled("the file to reopen where it was read", async () => {
       const f = await front();
       if (f.win.title !== readName) return null;
-      const ratio = await f.s.page<number>(`const el = document.querySelector(".pv-scroll") ?? document.querySelector(".ed .cm-scroller"); return el.scrollTop / (el.scrollHeight - el.clientHeight)`);
+      const ratio = await f.s.page<number>(`const el = document.querySelector('.pane-pv:not([aria-hidden="true"]) .pv-scroll') ?? document.querySelector(".ed .cm-scroller"); return el.scrollTop / (el.scrollHeight - el.clientHeight)`);
       last = ratio;
       return Math.abs(ratio - 0.5) < 0.02 && { f, ratio };
     });
@@ -1413,7 +1414,7 @@ async function welcomeChecks() {
     const reopened = await settled("the file to reopen where it was read", async () => {
       const ws = await s.windows();
       if (ws.length !== 1 || ws[0]!.title !== "版本说明.md") return null;
-      ratio = await s.at(ws[0]!.id).page<number>(`const el = document.querySelector(".pv-scroll"); return el ? el.scrollTop / (el.scrollHeight - el.clientHeight) : -1`);
+      ratio = await s.at(ws[0]!.id).page<number>(`const el = document.querySelector('.pane-pv:not([aria-hidden="true"]) .pv-scroll'); return el ? el.scrollTop / (el.scrollHeight - el.clientHeight) : -1`);
       return Math.abs(ratio - 0.5) < 0.02 && ws[0]!;
     });
     check("its 最近 row reopens the file in the welcome window's place, scrolled back to 50%", !!reopened && JSON.stringify(reopened.bounds) === JSON.stringify(welcome.bounds), `ratio ${ratio}; ${await describe()}`);

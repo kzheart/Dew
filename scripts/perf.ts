@@ -3,7 +3,9 @@
  * Types into a long, math-heavy document in the real app and reports how long
  * each keystroke takes to paint in the editor and to reach the preview.
  *
- *   bun scripts/perf.ts [--no-build] [--inline] [--keys 40] [--out file.json]
+ *   bun scripts/perf.ts [--no-build] [--inline] [--full] [--keys 40] [--out file.json]
+ *
+ * It types in the split source, or with --full in the source alone, where the preview updates hidden.
  */
 import { $ } from "bun";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -13,7 +15,7 @@ import { parseArgs } from "node:util";
 import { Automation } from "./automation";
 
 const { values: args } = parseArgs({
-  options: { "no-build": { type: "boolean" }, inline: { type: "boolean" }, keys: { type: "string", default: "40" }, out: { type: "string" } },
+  options: { "no-build": { type: "boolean" }, inline: { type: "boolean" }, full: { type: "boolean" }, keys: { type: "string", default: "40" }, out: { type: "string" } },
 });
 const root = resolve(import.meta.dir, "..");
 const appName = "DewPerf";
@@ -91,7 +93,7 @@ try {
   const page = <T = any>(script: string) => app!.eval<T>(script, win);
   await waitFor("the page", () => page<boolean>(`return !!document.querySelector(".stat")`));
   await waitFor("the source editor", async () => {
-    await app!.request("menu", { window: win, path: ["视图", "源码分栏"] });
+    await app!.request("menu", { window: win, path: ["视图", args.full ? "源码" : "源码分栏"] });
     await Bun.sleep(500);
     return page<boolean>(`return !!document.querySelector(".ed .cm-content")`);
   });
@@ -146,6 +148,7 @@ try {
     lines: text.split("\n").length,
     formulas: 200 * 3,
     inline: !!args.inline,
+    layout: args.full ? "full" : "split",
     keys: result.input.length,
     inputMs: summary(result.input),
     previewMs: summary(result.preview),
