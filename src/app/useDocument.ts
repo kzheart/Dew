@@ -45,7 +45,7 @@ export function useDocument(initial: { text: string; state: DocumentState }) {
   }, [flush]);
 
   useEffect(() => {
-    const offState = host.doc.onState(setState);
+    const offState = host.doc.followState(setState);
     const offReload = host.doc.onReload(async () => {
       clearTimeout(timer.current);
       unsent.current = null;

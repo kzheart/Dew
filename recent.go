@@ -218,38 +218,39 @@ func (r *recentService) closedWindow(win *mygo.Window, path string) {
 		return
 	}
 	now := time.Now().UnixMilli()
-	_ = r.store.edit(r.keep(), func(files map[string]RecentFile) {
+	_ = r.change(win, func(files map[string]RecentFile) {
 		f := files[path]
 		files[path] = RecentFile{Path: path, ClosedAt: now, Progress: progress, Pinned: f.Pinned}
 	})
-	r.publish(win)
+}
+
+// change edits the recent files and tells the windows, as they are once
+// gone has closed.
+func (r *recentService) change(gone *mygo.Window, fn func(files map[string]RecentFile)) error {
+	err := r.store.edit(r.keep(), fn)
+	r.publish(gone)
+	return err
 }
 
 // Pin keeps the recent file at path above the others, and past the limit
 // of recent files, or lets it go back among them.
 func (r *recentService) Pin(path string, pinned bool) error {
-	err := r.store.edit(r.keep(), func(files map[string]RecentFile) {
+	return r.change(nil, func(files map[string]RecentFile) {
 		if f, ok := files[path]; ok {
 			f.Pinned = pinned
 			files[path] = f
 		}
 	})
-	r.publish(nil)
-	return err
 }
 
 // Forget drops the file at path from the recent files.
 func (r *recentService) Forget(path string) error {
-	err := r.store.edit(r.keep(), func(files map[string]RecentFile) { delete(files, path) })
-	r.publish(nil)
-	return err
+	return r.change(nil, func(files map[string]RecentFile) { delete(files, path) })
 }
 
 // Clear forgets every recent file, the pinned ones too.
 func (r *recentService) Clear() error {
-	err := r.store.edit(r.keep(), func(files map[string]RecentFile) { clear(files) })
-	r.publish(nil)
-	return err
+	return r.change(nil, func(files map[string]RecentFile) { clear(files) })
 }
 
 // headBytes is how much of a closed file its sketch reads.

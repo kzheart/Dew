@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -147,6 +148,15 @@ type prefsStore struct {
 	mu     sync.Mutex
 	loaded bool
 	prefs  Prefs
+	// watchers keep what the app derives from the preferences in step,
+	// as set up at launch.
+	watchers []func(p Prefs, keys []string)
+}
+
+// watch calls fn with the saved preferences and the JSON names of the
+// fields that changed, after each change.
+func (s *prefsStore) watch(fn func(p Prefs, keys []string)) {
+	s.watchers = append(s.watchers, fn)
 }
 
 func prefsPath() (string, error) {
@@ -183,9 +193,21 @@ func (s *prefsStore) Get() (Prefs, error) {
 	return s.prefs, nil
 }
 
+// PrefsChange is what a window changed of the preferences: the saved
+// preferences and the JSON names of the fields it changed.
+type PrefsChange struct {
+	Prefs Prefs    `json:"prefs"`
+	Keys  []string `json:"keys"`
+}
+
+// PrefsChanged tells the other windows what a window changed of the
+// preferences, so that the tabs of a group read alike.
+var PrefsChanged = mygo.NewEvent[PrefsChange]("prefs")
+
 // Update saves the fields of p that keys name by their JSON names, and
 // keeps the others as they are: each window changes only what it changed.
-func (s *prefsStore) Update(p Prefs, keys []string) error {
+// The other windows take the change.
+func (s *prefsStore) Update(ctx context.Context, p Prefs, keys []string) error {
 	cur, err := s.Get()
 	if err != nil {
 		return err
@@ -206,7 +228,20 @@ func (s *prefsStore) Update(p Prefs, keys []string) error {
 	if err := remarshal(onto, &next); err != nil {
 		return err
 	}
-	return s.Set(next)
+	if err := s.set(next); err != nil {
+		return err
+	}
+	saved, _ := s.Get()
+	caller := mygo.CallerWindow(ctx)
+	for _, w := range mygo.Windows() {
+		if w != caller {
+			PrefsChanged.Emit(w, PrefsChange{Prefs: saved, Keys: keys})
+		}
+	}
+	for _, fn := range s.watchers {
+		fn(saved, keys)
+	}
+	return nil
 }
 
 func remarshal(from, to any) error {
@@ -217,8 +252,9 @@ func remarshal(from, to any) error {
 	return json.Unmarshal(b, to)
 }
 
-// Set saves the preferences.
-func (s *prefsStore) Set(p Prefs) error {
+// set saves the preferences. Unbound: a change goes through Update, which
+// tells the windows.
+func (s *prefsStore) set(p Prefs) error {
 	p = p.normalized()
 	path, err := prefsPath()
 	if err != nil {

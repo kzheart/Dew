@@ -135,6 +135,15 @@ export interface Prefs {
 }
 
 /**
+ * PrefsChange is what a window changed of the preferences: the saved
+ * preferences and the JSON names of the fields it changed.
+ */
+export interface PrefsChange {
+  prefs: Prefs;
+  keys: string[];
+}
+
+/**
  * RecentFile is a file that was open in a window and closed, as the light
  * table's 水汽 and the quick open palette show it.
  */
@@ -320,13 +329,10 @@ export const Prefs = {
   get(): Promise<Prefs> {
     return call("Prefs.Get");
   },
-  /** Set saves the preferences. */
-  set(p: Prefs): Promise<void> {
-    return call("Prefs.Set", p);
-  },
   /**
    * Update saves the fields of p that keys name by their JSON names, and
    * keeps the others as they are: each window changes only what it changed.
+   * The other windows take the change.
    */
   update(p: Prefs, keys: string[]): Promise<void> {
     return call("Prefs.Update", p, keys);
@@ -452,6 +458,11 @@ export const events = {
   handoff: event<Handoff>("handoff"),
   /** Commands carries menu commands to the page of the focused window. */
   command: event<Command>("command"),
+  /**
+   * PrefsChanged tells the other windows what a window changed of the
+   * preferences, so that the tabs of a group read alike.
+   */
+  prefs: event<PrefsChange>("prefs"),
   /**
    * RecentFiles tells every window the recent files, newest first,
    * as they change. Files open in some window are left out.

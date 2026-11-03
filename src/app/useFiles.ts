@@ -50,10 +50,7 @@ export function useFiles(initial: FileTab[]): ShownFile[] {
       addSaved(c.saved);
       addClosed(c.closed);
     };
-    const off = host.files.onChange(take);
-    // What changed before the page listened.
-    void host.files.list().then(take, () => {});
-    return off;
+    return host.files.follow(take);
   }, []);
 
   return withClosed(tabs, closed).map((t) => ({ ...t, born: t.id === born, ripple: saved.includes(t.id) }));

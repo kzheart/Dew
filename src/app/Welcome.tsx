@@ -6,6 +6,7 @@ import { usePresence } from "./hooks";
 import { LightTable } from "./LightTable";
 import { QuickOpen } from "./QuickOpen";
 import { Toasts, useToasts } from "./Toasts";
+import { usePrefs } from "./usePrefs";
 import { useRecent } from "./useRecent";
 import { Veil } from "./Veil";
 
@@ -14,7 +15,8 @@ type Overlay = "palette" | "table" | null;
 const newFile = () => void host.files.new().catch(() => {});
 
 /** The page of the window the app shows while no document is open: start a file, or find a recent one again. */
-export function Welcome({ prefs, part }: { prefs: Prefs; part: Handoff }) {
+export function Welcome({ prefs: initialPrefs, part }: { prefs: Prefs; part: Handoff }) {
+  const [prefs] = usePrefs(initialPrefs);
   const recent = useRecent();
   const rows = welcomeRows(recent, Date.now());
   const [overlay, setOverlay] = useState<Overlay>(null);

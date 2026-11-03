@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"log"
+	"slices"
 
 	"github.com/egoist/mygo"
 
@@ -35,6 +36,16 @@ func main() {
 	welcome.prefs = prefs
 	welcome.wire()
 	files.recent = &recentService{docs: docs, prefs: prefs}
+	prefs.watch(func(_ Prefs, keys []string) {
+		if slices.Contains(keys, "bg") {
+			for _, w := range mygo.Windows() {
+				_ = w.SetBackgroundColor(paperColor(prefs))
+			}
+		}
+		if slices.Contains(keys, "keep") {
+			files.recent.publish(nil)
+		}
+	})
 
 	mygo.BindAs("Doc", docs.Service())
 	mygo.BindAs("Files", files)

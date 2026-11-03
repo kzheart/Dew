@@ -14,14 +14,13 @@ import { toggleTask } from "../markdown/source";
 import { Article } from "../preview/Article";
 import type { BlockActions, LightboxTarget } from "../preview/actions";
 import { host, type Command, type DocumentState, type FileTab, type Handoff, type Prefs } from "../platform";
-import { changedKeys } from "../state/prefs";
 import { fileName } from "../state/recent";
 import { glassStyle } from "../state/settings";
 import { modeOf, viewReducer, type ViewState } from "../state/view";
 import { Divider, StatusBar, Toc } from "./Chrome";
 import { Dock } from "./Dock";
 import { Header, type ExportAction, type Popover } from "./Header";
-import { useDebouncedEffect, usePresence } from "./hooks";
+import { usePresence } from "./hooks";
 import { LightTable } from "./LightTable";
 import { QuickOpen } from "./QuickOpen";
 import { Settings } from "./Settings";
@@ -31,6 +30,7 @@ import { Toasts, useToasts } from "./Toasts";
 import { useDocument } from "./useDocument";
 import { useFiles } from "./useFiles";
 import { useReadingProgress } from "./useReadingProgress";
+import { usePrefs } from "./usePrefs";
 import { useRecent } from "./useRecent";
 import { useScrollSync } from "./useScrollSync";
 import { Veil } from "./Veil";
@@ -50,7 +50,6 @@ export function App({ initial }: { initial: Initial }) {
   const files = useFiles(initial.files);
   const joined = initial.files.length > 1;
   const recent = useRecent();
-  const [prefs, setPrefs] = useState(initial.prefs);
   const [view, dispatch] = useReducer(viewReducer, {
     base: initial.prefs.base,
     source: initial.prefs.source === "off" ? null : initial.prefs.source,
@@ -115,15 +114,8 @@ export function App({ initial }: { initial: Initial }) {
     [parseText],
   );
 
-  const updatePrefs = useCallback((p: Partial<Prefs>) => setPrefs((old) => ({ ...old, ...p })), []);
   const sourcePref: Prefs["source"] = view.source ?? "off";
-  // Only what this window changed, so that it never puts back what another window changed meanwhile.
-  const savedPrefs = useRef(initial.prefs);
-  useDebouncedEffect({ ...prefs, base: view.base, source: sourcePref }, 300, (p) => {
-    const keys = changedKeys(savedPrefs.current, p);
-    savedPrefs.current = p;
-    if (keys.length) void host.prefs.update(p, keys).catch(() => {});
-  });
+  const [prefs, updatePrefs] = usePrefs(initial.prefs, { base: view.base, source: sourcePref });
 
   const pvRef = useRef<HTMLDivElement>(null);
   const articleRef = useRef<HTMLElement>(null);
@@ -227,7 +219,7 @@ export function App({ initial }: { initial: Initial }) {
     () => ({
       interactive: true,
       showLineNumbers: prefs.showLn,
-      onToggleLineNumbers: () => setPrefs((p) => ({ ...p, showLn: !p.showLn })),
+      onToggleLineNumbers: () => updatePrefs({ showLn: !prefs.showLn }),
       onToggleTask: (line) => {
         edit((t) => toggleTask(t, line));
         if (edView.current) flashLine(edView.current, line, 1200);

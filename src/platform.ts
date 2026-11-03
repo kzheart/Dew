@@ -2,7 +2,8 @@ import { isMyGo, onDocumentReload, onDocumentState } from "mygo-runtime";
 import { docFileURL } from "./app/docFile";
 import { defaultPrefs } from "./defaultPrefs";
 import * as go from "./mygo";
-import type { CardBackground, Command, DocumentState, FileTab, FolderFile, Handoff, PageGuard, Prefs, RecentFile, ViewState } from "./mygo";
+import type { CardBackground, Command, DocumentState, FileTab, FolderFile, Handoff, PageGuard, Prefs, PrefsChange, RecentFile, ViewState } from "./mygo";
+import { changedKeys } from "./state/prefs";
 
 export type { CardBackground, Command, DocumentState, FileTab, FolderFile, Handoff, PageGuard, Prefs, RecentFile };
 
@@ -16,7 +17,8 @@ export interface Host {
     save(): Promise<void>;
     revert(): Promise<void>;
     keepMine(): Promise<void>;
-    onState(fn: (s: DocumentState) => void): () => void;
+    /** The document's state now and as it changes. */
+    followState(fn: (s: DocumentState) => void): () => void;
     onReload(fn: () => void): () => void;
   };
   /** The documents of the window's tab group, which the dock shows. */
@@ -39,7 +41,8 @@ export interface Host {
     folder(): Promise<FolderFile[]>;
     /** Opens a new, empty file of that name beside the window's document. */
     create(name: string): Promise<void>;
-    onChange(fn: (tabs: FileTab[]) => void): () => void;
+    /** What the dock shows now and as it changes. */
+    follow(fn: (tabs: FileTab[]) => void): () => void;
   };
   /** The files windows closed, with how far they were read. */
   recent: {
@@ -51,10 +54,16 @@ export interface Host {
     report(progress: number): Promise<void>;
     /** How far the window's document was read when it last closed. */
     resume(): Promise<number>;
-    onChange(fn: (files: RecentFile[]) => void): () => void;
+    /** The recent files now and as they change. */
+    follow(fn: (files: RecentFile[]) => void): () => void;
   };
   /** The preferences new windows start with; update saves only the named keys. */
-  prefs: { get(): Promise<Prefs>; update(p: Prefs, keys: (keyof Prefs)[]): Promise<void> };
+  prefs: {
+    get(): Promise<Prefs>;
+    update(p: Prefs, keys: (keyof Prefs)[]): Promise<void>;
+    /** What changed of the preferences since the page read since, and what other windows change. */
+    follow(since: Prefs, fn: (p: Prefs, keys: (keyof Prefs)[]) => void): () => void;
+  };
   exports: {
     pdf(html: string, name: string): Promise<string>;
     html(html: string, name: string): Promise<string>;
@@ -84,12 +93,20 @@ function appHost(): Host {
       save: go.Doc.save,
       revert: go.Doc.revert,
       keepMine: go.Conflict.keepMine,
-      onState: onDocumentState,
+      followState: (fn) => follow(onDocumentState, go.Doc.state, fn),
       onReload: onDocumentReload,
     },
-    files: { ...go.Files, onChange: (fn) => go.events.files.on(fn), onHandoff: (fn) => go.events.handoff.on(fn) },
-    recent: { ...go.Recent, onChange: (fn) => go.events.recent.on(fn) },
-    prefs: go.Prefs,
+    files: { ...go.Files, follow: (fn) => follow((f) => go.events.files.on(f), go.Files.list, fn), onHandoff: (fn) => go.events.handoff.on(fn) },
+    recent: { ...go.Recent, follow: (fn) => follow((f) => go.events.recent.on(f), go.Recent.list, fn) },
+    prefs: {
+      ...go.Prefs,
+      follow: (since, fn) =>
+        follow<PrefsChange>(
+          (f) => go.events.prefs.on(f),
+          () => go.Prefs.get().then((p) => ({ prefs: p, keys: changedKeys(since, p) })),
+          (c) => fn(c.prefs, c.keys as (keyof Prefs)[]),
+        ),
+    },
     exports: go.Export,
     assets: go.Assets,
     imageURL: (src) => docFileURL(src) ?? src,
@@ -133,8 +150,9 @@ async function browserHost(): Promise<Host> {
       save: async () => setState({ ...state, edited: false }),
       revert: async () => {},
       keepMine: async () => {},
-      onState: (fn) => {
+      followState: (fn) => {
         listeners.add(fn);
+        fn(state);
         return () => listeners.delete(fn);
       },
       onReload: () => () => {},
@@ -158,8 +176,9 @@ async function browserHost(): Promise<Host> {
       open: async () => {},
       folder: async () => [],
       create: async () => {},
-      onChange: (fn) => {
+      follow: (fn) => {
         fileListeners.add(fn);
+        fn(tabs());
         return () => fileListeners.delete(fn);
       },
     },
@@ -170,9 +189,9 @@ async function browserHost(): Promise<Host> {
       head: async () => "",
       report: async () => {},
       resume: async () => 0,
-      onChange: () => () => {},
+      follow: () => () => {},
     },
-    prefs: { get: async () => defaultPrefs, update: async () => {} },
+    prefs: { get: async () => defaultPrefs, update: async () => {}, follow: () => () => {} },
     exports: {
       pdf: async () => "",
       html: async () => "",
@@ -197,3 +216,17 @@ async function browserHost(): Promise<Host> {
 }
 
 export const host: Host = isMyGo() ? appHost() : await browserHost();
+
+/**
+ * Takes what the Go side sends as it changes, and what read returns unless a change came first:
+ * a reply can arrive after a change it doesn't hold. Returns the unsubscribe.
+ */
+function follow<T>(onChange: (fn: (v: T) => void) => () => void, read: () => Promise<T>, take: (v: T) => void): () => void {
+  let changed = false;
+  const off = onChange((v) => {
+    changed = true;
+    take(v);
+  });
+  void read().then((v) => !changed && take(v), () => {});
+  return off;
+}
