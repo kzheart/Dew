@@ -655,15 +655,13 @@ header.bar{transition:padding .45s cubic-bezier(.3,1.25,.45,1)}
 .dk.born .m18{animation:dropFall .75s cubic-bezier(.45,0,.55,1) backwards}
 @keyframes dkBorn{from{max-width:0;opacity:.4}to{max-width:260px}}
 @keyframes dropFall{0%{transform:translateY(-130px) scale(.7,1.3);opacity:0}15%{opacity:1}58%{transform:translateY(0) scale(1.32,.7)}74%{transform:translateY(-5px) scale(.92,1.1)}100%{transform:none}}
-/* 凝露: a swap of windows happens under one opaque mist, the same frame on both sides. The leaving page's mist spreads from where it was clicked; a new file's clears from where writing starts. */
-.veil{position:absolute;inset:0;z-index:1000;--x:50%;--y:50%;--r:-60px;background:radial-gradient(circle,rgba(110,135,170,.16) 0 1.1px,transparent 1.6px) 0 0/11px 13px,radial-gradient(circle,rgba(110,135,170,.1) 0 .8px,transparent 1.3px) 5px 7px/17px 19px,#E3E8EF}
-.th-paper .veil{background-color:#E8DCC2}
-.th-night .veil{background-color:#303238}
-.veil.covering{-webkit-mask-image:radial-gradient(circle at var(--x) var(--y),#000 var(--r),transparent calc(var(--r) + 60px));mask-image:radial-gradient(circle at var(--x) var(--y),#000 var(--r),transparent calc(var(--r) + 60px))}
+/* 纸面交接: a swap of windows happens on a blank sheet of the page's own paper, the same frame on both sides. It lies under the chrome, which stays put. */
+.veil{position:absolute;inset:0;z-index:13;background:#FFFFFF}
+.th-paper .veil{background:#F4ECDA}
+.th-night .veil{background:#1E1E20}
 .veil.revealing{pointer-events:none}
-.veil.revealing[data-kind="new"]{-webkit-mask-image:radial-gradient(circle at var(--x) var(--y),transparent var(--r),#000 calc(var(--r) + 60px));mask-image:radial-gradient(circle at var(--x) var(--y),transparent var(--r),#000 calc(var(--r) + 60px))}
-.veil-ring{position:absolute;left:-20px;top:-20px;width:40px;height:40px;border-radius:50%;border:1.5px solid rgba(10,102,216,.55);opacity:0}
-/* A page arriving under the mist holds its entrance until the mist clears. Pausing restarts nothing, as taking an animation off would. */
+.veil-ring{position:absolute;left:-20px;top:-20px;z-index:13;width:40px;height:40px;border-radius:50%;border:1.5px solid rgba(10,102,216,.45);opacity:0;pointer-events:none}
+/* A page arriving on the blank sheet holds its entrance until the sheet lifts. Pausing restarts nothing, as taking an animation off would. */
 .app:has(> .veil.held) *{animation-play-state:paused}
 /* A tab that joins a group keeps the chrome its group already showed. */
 .app.joined header .gtitle,.app.joined header .seg-g,.app.joined header .srcg,.app.joined header .ig,.app.joined .stat,.app.joined .dock{animation:none}

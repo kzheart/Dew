@@ -12,7 +12,7 @@ const prefs = host.prefs.get().catch(() => defaultPrefs);
 
 switch (pageOf(location.search)) {
   case "welcome":
-    root.render(<Welcome prefs={await prefs} />);
+    root.render(<Welcome prefs={await prefs} part={await host.files.part().catch(() => ({ kind: "", role: "" }))} />);
     break;
   case "document": {
     const [text, state, files, resume, part] = await Promise.all([

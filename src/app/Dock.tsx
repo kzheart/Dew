@@ -20,7 +20,6 @@ export function Dock({ files, onSelect, onClose, onNew, onOverview }: {
   onNew(): void;
   onOverview(): void;
 }) {
-  const closable = files.filter((f) => !f.closing).length > 1;
   return (
     <nav className="glass dock" aria-label="已打开的文件">
       {files.map((f) => {
@@ -33,11 +32,9 @@ export function Dock({ files, onSelect, onClose, onNew, onOverview }: {
               <span className="nm">{f.name}</span>
             </button>
             {!f.current && <span className="dk-tip" aria-hidden="true">{f.name}</span>}
-            {closable && (
-              <button className="dk-x" aria-label={`关闭 ${f.name}`} title="关闭 ⌘W" onClick={() => onClose(f.id)}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-              </button>
-            )}
+            <button className="dk-x" aria-label={`关闭 ${f.name}`} title="关闭 ⌘W" onClick={() => onClose(f.id)}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
           </div>
         );
       })}

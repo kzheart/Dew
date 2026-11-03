@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { host, type Command, type Prefs } from "../platform";
+import { host, type Command, type Handoff, type Prefs } from "../platform";
 import { fileName, welcomeRows } from "../state/recent";
 import { glassStyle } from "../state/settings";
 import { usePresence } from "./hooks";
@@ -12,10 +12,9 @@ import { Veil } from "./Veil";
 type Overlay = "palette" | "table" | null;
 
 const newFile = () => void host.files.new().catch(() => {});
-const away = { kind: "", role: "" };
 
 /** The page of the window the app shows while no document is open: start a file, or find a recent one again. */
-export function Welcome({ prefs }: { prefs: Prefs }) {
+export function Welcome({ prefs, part }: { prefs: Prefs; part: Handoff }) {
   const recent = useRecent();
   const rows = welcomeRows(recent, Date.now());
   const [overlay, setOverlay] = useState<Overlay>(null);
@@ -100,7 +99,7 @@ export function Welcome({ prefs }: { prefs: Prefs }) {
           onClose={close}
         />
       )}
-      <Veil part={away} />
+      <Veil part={part} />
     </div>
   );
 }

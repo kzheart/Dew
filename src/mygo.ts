@@ -232,7 +232,8 @@ export const Files = {
   /**
    * Close closes the document of the tab group's window id, which asks to
    * save it first when it must: on its own tab, where the sheet shows. The
-   * tab the caller shows hands over to a neighbor under the mist first.
+   * tab the caller shows hands over to a neighbor under the mist first, and
+   * the last one to the welcome window.
    */
   close(id: number): Promise<void> {
     return call("Files.Close", id);

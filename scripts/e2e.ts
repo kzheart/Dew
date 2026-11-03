@@ -178,10 +178,10 @@ async function documentChecks() {
     const content = () => page<string>(`return await mygo.call("Doc.Content")`);
 
     const alone = await dock(page);
-    const chrome = await page<{ title: boolean; closable: boolean }>(`return { title: !!document.querySelector(".gtitle"), closable: !!document.querySelector(".dk-x") }`);
+    const chrome = await page<{ title: boolean; closable: boolean }>(`return { title: !!document.querySelector(".gtitle"), closable: !!document.querySelector('.dk.on [aria-label="关闭 版本说明.md"]') }`);
     check(
-      "the dock shows the window's one file with a full tear, and no title glass or close button",
-      alone.length === 1 && alone[0]!.current && alone[0]!.tip === "版本说明.md，已保存 · 与磁盘同步" && alone[0]!.tear === "saved" && !chrome.title && !chrome.closable,
+      "the dock shows the window's one file with a full tear and its close button, and no title glass",
+      alone.length === 1 && alone[0]!.current && alone[0]!.tip === "版本说明.md，已保存 · 与磁盘同步" && alone[0]!.tear === "saved" && !chrome.title && chrome.closable,
       JSON.stringify({ alone, chrome }),
     );
     await capture("e2e-dock");
@@ -1310,18 +1310,19 @@ async function welcomeChecks() {
         return ws.length === 1 && (await isWelcome(ws[0]!.id)) && ws[0]!;
       });
     const button = (label: string) => `[...document.querySelectorAll('main[aria-label="欢迎"] button')].find((b) => b.textContent.startsWith(${JSON.stringify(label)}))`;
+    const closeInDock = `document.querySelector(".dk.on .dk-x").click()`;
     const describe = async () => JSON.stringify(await Promise.all(((await s.windows()) ?? []).map(async (w) => ({ title: w.title, welcome: await isWelcome(w.id) }))));
 
     const [doc] = await s.windows();
     await s.page(`const el = document.querySelector(".pv-scroll"); el.scrollTop = 0.5 * (el.scrollHeight - el.clientHeight)`);
     await Bun.sleep(700);
-    await s.menu("文件", "关闭");
+    await s.page(closeInDock);
     const welcome = await welcomeAlone();
-    if (!welcome) return check("closing the last file leaves the welcome window", false, await describe());
+    if (!welcome) return check("closing the last file in its dock leaves the welcome window", false, await describe());
     const w = s.at(welcome.id);
     const rows = await settled("the 最近 list", () => w.page<string[] | null>(`const r = [...document.querySelectorAll('section[aria-label="最近"] button')].map((b) => b.getAttribute("aria-label")); return r.length ? r : null`));
     check(
-      "closing the last file leaves the welcome window where the file was, its 最近 listing the file",
+      "closing the last file in its dock leaves the welcome window where the file was, its 最近 listing the file",
       JSON.stringify(welcome.bounds) === JSON.stringify(doc!.bounds) && rows?.join() === "重新打开 版本说明.md",
       JSON.stringify({ doc: doc!.bounds, welcome: welcome.bounds, rows }),
     );
@@ -1365,7 +1366,7 @@ async function welcomeChecks() {
     check("its 最近 row reopens the file in the welcome window's place, scrolled back to 50%", !!reopened && JSON.stringify(reopened.bounds) === JSON.stringify(welcome.bounds), `ratio ${ratio}; ${await describe()}`);
     if (!reopened) return;
 
-    await s.at(reopened.id).menu("文件", "关闭");
+    await s.at(reopened.id).page(closeInDock);
     const again = await welcomeAlone();
     if (!again) return check("closing the file again leaves the welcome window", false, await describe());
     await s.at(again.id).page(`${button("新建")}.click()`);
@@ -1376,13 +1377,11 @@ async function welcomeChecks() {
     check("新建 opens an untitled file, and the welcome window goes away", !!untitled, await describe());
     if (!untitled) return;
 
+    // Like the window's close button, 文件 › 关闭 closes the window for good: only the dock's ✕ goes back to the welcome page.
     await s.at(untitled.id).menu("文件", "关闭");
-    const last = await welcomeAlone();
-    if (!last) return check("closing the untitled file leaves the welcome window", false, await describe());
-    await s.at(last.id).menu("文件", "关闭");
     await Bun.sleep(1500);
     const left = (await s.windows()) ?? [];
-    check("文件 › 关闭 on the welcome window closes it for good, the app still running", left.length === 0, await describe());
+    check("文件 › 关闭 on the last file closes its window for good, no welcome window, the app still running", left.length === 0, await describe());
   });
 }
 

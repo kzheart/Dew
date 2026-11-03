@@ -11,15 +11,14 @@ import (
 const welcomeURL = "/?page=welcome"
 
 // welcome keeps the one window the app shows while no document is open:
-// after the last document window closes, when the Dock icon is clicked with
-// no windows, and at a launch that opens no file. A document window that
-// opens takes its place. Main thread only.
+// in the place of the last file closed from its dock, when the Dock icon is
+// clicked with no windows, and at a launch that opens no file. A window
+// closed with its close button or ⌘W leaves the app without windows. A
+// document window that opens takes its place. Main thread only.
 type welcome struct {
-	docs *mygo.Documents[string]
-	win  *mygo.Window
-	// dismissed reports that the last window to close was the welcome
-	// window itself, which leaves the app without windows on purpose.
-	dismissed bool
+	docs  *mygo.Documents[string]
+	prefs *prefsStore
+	win   *mygo.Window
 }
 
 func (w *welcome) wire() {
@@ -39,12 +38,6 @@ func (w *welcome) wire() {
 			})
 		}()
 	})
-	mygo.App.OnWindowAllClosed(func() {
-		if !w.dismissed {
-			w.show()
-		}
-		w.dismissed = false
-	})
 	mygo.App.OnActivate(func(visible bool) {
 		if !visible && len(w.docs.Documents()) == 0 {
 			w.show()
@@ -59,6 +52,22 @@ func (w *welcome) show() {
 		w.win.Focus()
 		return
 	}
+	w.open(false)
+}
+
+// arrive opens the welcome window as a hidden tab of doc's group, to take
+// doc's place under the mist as its last file closes.
+func (w *welcome) arrive(doc *mygo.Window) *mygo.Window {
+	if w.win != nil {
+		return w.win
+	}
+	win := w.open(true)
+	joinTabGroup(win, doc)
+	return win
+}
+
+func (w *welcome) open(hidden bool) *mygo.Window {
+	background := paperColor(w.prefs)
 	win := mygo.NewWindow(mygo.WindowOptions{
 		URL:                  welcomeURL,
 		Width:                1280,
@@ -67,18 +76,19 @@ func (w *welcome) show() {
 		MinHeight:            420,
 		TitleBarStyle:        mygo.TitleBarHiddenInset,
 		TrafficLightPosition: &mygo.Point{X: 20, Y: 24},
-		BackgroundColor:      "#FFFFFF",
+		BackgroundColor:      background,
 		// Where the last document window was, and where the next one opens.
 		StateKey: "document",
 		Title:    "Dew",
+		Hidden:   hidden,
 	})
 	w.win = win
 	win.OnClosed(func() {
 		if w.win == win {
 			w.win = nil
-			w.dismissed = true
 		}
 	})
+	return win
 }
 
 // replaceWith gives the welcome window's frame to doc, a document window

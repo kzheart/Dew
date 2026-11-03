@@ -122,8 +122,6 @@ func (s *filesService) swap(h *handoff) {
 			hideTabBar(h.to)
 			selectTab(h.to)
 		})
-		// Its page drew over the mist it started on by now.
-		time.AfterFunc(time.Second, func() { _ = h.to.SetBackgroundColor("#FFFFFF") })
 	}
 	if h.then != nil {
 		h.then()

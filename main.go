@@ -30,7 +30,9 @@ func main() {
 		NoUntitled: true,
 	})
 	files.docs = docs
+	files.welcome = welcome
 	welcome.docs = docs
+	welcome.prefs = prefs
 	welcome.wire()
 	files.recent = &recentService{docs: docs, prefs: prefs}
 
@@ -67,11 +69,8 @@ func newDocumentWindow(files *filesService, welcome *welcome, prefs *prefsStore,
 		from = welcome.win
 	}
 	// Until its page draws, which may wait for the window to show, it
-	// shows its background: the mist it arrives under.
-	background := "#FFFFFF"
-	if from != nil {
-		background = mistColor(prefs)
-	}
+	// shows its background: the blank sheet it arrives on.
+	background := paperColor(prefs)
 	win := mygo.NewWindow(mygo.WindowOptions{
 		URL:                  "/",
 		Width:                1280,
@@ -93,15 +92,15 @@ func newDocumentWindow(files *filesService, welcome *welcome, prefs *prefsStore,
 	return win
 }
 
-// mistColor is the veil's color (src/styles/app.css) for the background
-// new windows start with.
-func mistColor(prefs *prefsStore) string {
+// paperColor is the page's paper (.th-paper, .th-night in
+// src/styles/app.css), for the background a window starts with.
+func paperColor(prefs *prefsStore) string {
 	p, _ := prefs.Get()
 	switch p.Background {
 	case BackgroundPaper:
-		return "#E8DCC2"
+		return "#F4ECDA"
 	case BackgroundNight:
-		return "#303238"
+		return "#1E1E20"
 	}
-	return "#E3E8EF"
+	return "#FFFFFF"
 }

@@ -35,8 +35,9 @@ var Files = mygo.NewEvent[[]FileTab]("files")
 // of its window's tab group. Document windows are tabs of one native
 // window, whose own tab bar is hidden: the page draws the dock instead.
 type filesService struct {
-	docs   *mygo.Documents[string]
-	recent *recentService
+	docs    *mygo.Documents[string]
+	recent  *recentService
+	welcome *welcome
 
 	mu sync.Mutex
 	// unlisted holds the tabs the rest of their group does not list: one
@@ -70,7 +71,8 @@ func (s *filesService) Select(ctx context.Context, id int) error {
 
 // Close closes the document of the tab group's window id, which asks to
 // save it first when it must: on its own tab, where the sheet shows. The
-// tab the caller shows hands over to a neighbor under the mist first.
+// tab the caller shows hands over to a neighbor under the mist first, and
+// the last one to the welcome window.
 func (s *filesService) Close(ctx context.Context, id int) error {
 	w, err := s.member(ctx, id)
 	if err != nil {
@@ -93,6 +95,9 @@ func (s *filesService) Close(ctx context.Context, id int) error {
 		if i == len(group)-1 {
 			to = group[i-1]
 		}
+	}
+	if to == nil {
+		mygo.RunOnMain(func() { to = s.welcome.arrive(w) })
 	}
 	s.setListing(w, leaving)
 	s.refresh()
