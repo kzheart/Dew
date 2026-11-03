@@ -1047,6 +1047,33 @@ async function tabChecks() {
     check("clicking the other file in the dock shows its window instead", !!flipped, JSON.stringify(await shown()));
     await checkTitleBars("after switching files");
 
+    // 设置 is the app's, not a tab's: a background picked in one tab shows in the others.
+    const paperOf = (page: Session["page"]) => page<string>(`return getComputedStyle(document.querySelector('section[aria-label="实时编辑"]')).backgroundColor`);
+    const pickBackground = async (label: string) => {
+      top = await front();
+      await top.s.page(`document.querySelector('[aria-label="排版设置"]').click()`);
+      await waitFor("the Aa popover's link", () => top.s.page<boolean>(`return !!document.querySelector(".pop-aa .aa-more")`));
+      await top.s.page(`document.querySelector(".pop-aa .aa-more").click()`);
+      await waitFor("the settings inspector", () => top.s.page<boolean>(`return !!document.querySelector('aside[aria-label="设置"] [aria-label="${label}"]')`));
+      await top.s.page(`document.querySelector('aside[aria-label="设置"] [aria-label="${label}"]').click()`);
+      await top.s.page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    };
+    // A page in the background holds its transitions, so the other tab is looked at once it is in front.
+    const otherTabShows = async (color: string) => {
+      const was = top.win.id;
+      await top.s.page(`document.querySelector(".dk:not(.on) .dk-btn").click()`);
+      return settled(`the other tab to show ${color}`, async () => {
+        const ids = await shown();
+        return ids.length === 1 && ids[0] !== was && (await paperOf(s.at(ids[0]!).page)) === color;
+      });
+    };
+    await pickBackground("羊皮纸");
+    const paper = await otherTabShows("rgb(244, 236, 218)");
+    check("picking 羊皮纸 in 设置 of one tab turns the other tab's page to it too", !!paper, await paperOf((await front()).s.page));
+    await pickBackground("纯白");
+    const white = await otherTabShows("rgb(255, 255, 255)");
+    check("and 纯白 back again from that tab", !!white, await paperOf((await front()).s.page));
+
     top = await front();
     const editedName = top.win.title;
     await top.s.menu("视图", "源码");
@@ -1289,6 +1316,32 @@ async function tabChecks() {
       "a name that matches nothing offers 新建, and ↩ makes that file beside the current one and opens it",
       none === "没有匹配的文件新建「e2e 新笔记.md」" && !!made && existsSync(join(dir, "e2e 新笔记.md")),
       `${none}; ${(await s.windows()).map((w) => w.title).join(" / ")}`,
+    );
+
+    // The recent files Go keeps follow 最近文件保留 as it changes, not only at the next close.
+    top = await front();
+    await top.s.page(`document.querySelector('[aria-label="排版设置"]').click()`);
+    await waitFor("the Aa popover's link", () => top.s.page<boolean>(`return !!document.querySelector(".pop-aa .aa-more")`));
+    await top.s.page(`document.querySelector(".pop-aa .aa-more").click()`);
+    await waitFor("the settings inspector", () => top.s.page<boolean>(`return !!document.querySelector('aside[aria-label="设置"] .ssearch input')`));
+    await top.s.page(`
+      const i = document.querySelector('aside[aria-label="设置"] .ssearch input');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(i, "保留");
+      i.dispatchEvent(new Event("input", { bubbles: true }));
+    `);
+    await waitFor("the 最近文件保留 row", () => top.s.page<boolean>(`return !!document.querySelector('aside[aria-label="设置"] [aria-label="减少"]')`));
+    for (let i = 0; i < 4; i++) await top.s.page(`document.querySelector('aside[aria-label="设置"] [aria-label="减少"]').click()`);
+    await top.s.page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await waitFor("the inspector to close", () => top.s.page<boolean>(`return !document.querySelector('aside[aria-label="设置"]')`));
+    await top.s.page(`document.querySelector('.dock [aria-label="灯桌总览"]').click()`);
+    // Go keeps 10, of which it leaves out the files some window shows.
+    const kept = await settled("the light table to keep what Go keeps", () =>
+      top.s.page<boolean>(`const n = (await mygo.call("Recent.List")).length; return n <= 10 && document.querySelector('section[aria-label="最近关闭的文件"] .vcnt')?.textContent === String(n)`),
+    );
+    check(
+      "lowering 最近文件保留 to 10 in 设置 leaves the light table's recent files at 10",
+      !!kept,
+      `${await top.s.page<string>(`return document.querySelector('section[aria-label="最近关闭的文件"] .vcnt')?.textContent ?? "none"`)} shown, Go lists ${await top.s.page<number>(`return (await mygo.call("Recent.List")).length`)}`,
     );
   });
 }
