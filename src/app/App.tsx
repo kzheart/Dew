@@ -1,5 +1,5 @@
 import type { EditorView } from "@codemirror/view";
-import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { editAssist } from "../assist/editAssist";
 import { encodeImage } from "../assist/image";
 import { flashLine, locateLine } from "../editor/render";
@@ -53,6 +53,7 @@ export function App({ initial }: { initial: Initial }) {
   const [view, dispatch] = useReducer(viewReducer, {
     base: initial.prefs.base,
     source: initial.prefs.source === "off" ? null : initial.prefs.source,
+    layout: initial.prefs.source === "split" ? "split" : "full",
   } satisfies ViewState);
   const mode = modeOf(view);
   const [focus, setFocus] = useState(false);
@@ -119,15 +120,23 @@ export function App({ initial }: { initial: Initial }) {
 
   const pvRef = useRef<HTMLDivElement>(null);
   const articleRef = useRef<HTMLElement>(null);
-  const sync = useScrollSync(edView, pvRef, isSplit);
+  const sync = useScrollSync(edView, pvRef);
   const trackProgress = useReadingProgress(() => (showPv ? pvRef.current : edView.current?.scrollDOM ?? null), initial.resume);
-  // Entering split, the pane that was already on screen keeps its place and the new one follows it.
+  // A pane that comes on screen, or changes width, opens where the reader was. The preview is
+  // placed before the frame paints; a new editor exists only once its effect has run.
   const prevMode = useRef(mode);
+  useLayoutEffect(() => {
+    const from = prevMode.current;
+    if (from === mode || !showPv) return;
+    if (from === "edit" || from === "split" || mode === "split") sync.restore("preview");
+  }, [mode]);
   useEffect(() => {
     const from = prevMode.current;
     prevMode.current = mode;
-    if (mode !== "split" || from === "split") return;
-    const id = requestAnimationFrame(() => (from === "edit" ? sync.fromEditor() : sync.fromPreview()));
+    // Double-clicking a block places the editor at that block instead.
+    if (from === mode || !showEd || pendingLocate.current !== null) return;
+    // The second frame, once CodeMirror has measured its lines at the pane's new width.
+    let id = requestAnimationFrame(() => (id = requestAnimationFrame(() => sync.restore("editor"))));
     return () => cancelAnimationFrame(id);
   }, [mode]);
   const lastY = useRef<Record<string, number>>({});
@@ -304,13 +313,13 @@ export function App({ initial }: { initial: Initial }) {
     return () => window.removeEventListener("focus", sync);
   }, [mode, focus, prefs.inline]);
 
-  const theme = showEd && !isSplit ? "" : prefs.bg === "night" ? " th-night" : prefs.bg === "paper" ? " th-paper" : "";
+  const theme = prefs.bg === "night" ? " th-night" : prefs.bg === "paper" ? " th-paper" : "";
 
   return (
     <div style={glassStyle(prefs.glass)} className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}${setting ? " set-on" : ""}${joined ? " joined" : ""}`}>
       <main className="main">
         {showEd && (
-          <section className="pane-ed" aria-label="源码编辑" style={{ flex: isSplit ? `0 0 ${split}%` : "1 1 auto" }}>
+          <section className={`pane-ed bg-${prefs.bg}`} aria-label="源码编辑" style={{ flex: isSplit ? `0 0 ${split}%` : "1 1 auto" }}>
             <SourceEditor
               text={doc.text}
               inline={prefs.inline}
@@ -323,7 +332,7 @@ export function App({ initial }: { initial: Initial }) {
               onCursor={setCursor}
               onScroll={() => {
                 if (edView.current) trackScroll(edView.current.scrollDOM, "e");
-                sync.fromEditor();
+                sync.fromEditor(isSplit);
               }}
             />
           </section>
@@ -337,7 +346,7 @@ export function App({ initial }: { initial: Initial }) {
               onScroll={(e) => {
                 trackScroll(e.currentTarget, "p");
                 updateToc();
-                sync.fromPreview();
+                sync.fromPreview(isSplit);
               }}
               onClick={(e) => {
                 if (e.target === e.currentTarget && live && window.getSelection()?.isCollapsed !== false) live.onBlank();

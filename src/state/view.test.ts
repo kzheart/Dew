@@ -2,13 +2,13 @@ import { expect, test } from "bun:test";
 import { modeOf, viewReducer, type ViewAction, type ViewState } from "./view";
 
 const run = (s: ViewState, ...actions: ViewAction[]) => actions.reduce(viewReducer, s);
-const live: ViewState = { base: "live", source: null };
+const live: ViewState = { base: "live", source: null, layout: "full" };
 
 test("the four modes", () => {
   expect(modeOf(live)).toBe("live");
-  expect(modeOf({ base: "preview", source: null })).toBe("preview");
-  expect(modeOf({ base: "preview", source: "full" })).toBe("edit");
-  expect(modeOf({ base: "live", source: "split" })).toBe("split");
+  expect(modeOf({ ...live, base: "preview" })).toBe("preview");
+  expect(modeOf({ ...live, base: "preview", source: "full" })).toBe("edit");
+  expect(modeOf({ ...live, source: "split", layout: "split" })).toBe("split");
 });
 
 test("turning the source off returns to the base mode", () => {
@@ -18,7 +18,14 @@ test("turning the source off returns to the base mode", () => {
 });
 
 test("picking a base mode hides the source", () => {
-  expect(run({ base: "preview", source: "split" }, { type: "base", base: "live" })).toEqual(live);
+  expect(modeOf(run({ ...live, base: "preview", source: "split", layout: "split" }, { type: "base", base: "live" }))).toBe("live");
+});
+
+test("the source shows again the way it last showed", () => {
+  const split = run(live, { type: "toggleSource" }, { type: "layout", layout: "split" }, { type: "base", base: "live" });
+  expect(modeOf(split)).toBe("live");
+  expect(modeOf(run(split, { type: "toggleSource" }))).toBe("split");
+  expect(modeOf(run(split, { type: "toggleSource" }, { type: "layout", layout: "full" }, { type: "toggleSource" }, { type: "toggleSource" }))).toBe("edit");
 });
 
 test("the layout only changes while the source shows", () => {
@@ -31,7 +38,8 @@ test("shortcuts toggle their layout", () => {
   expect(modeOf(run(live, { type: "toggleLayout", layout: "split" }, { type: "toggleLayout", layout: "full" }))).toBe("edit");
 });
 
-test("locating a block keeps a split a split", () => {
-  expect(modeOf(run({ base: "preview", source: null }, { type: "locate" }))).toBe("edit");
-  expect(modeOf(run({ base: "preview", source: "split" }, { type: "locate" }))).toBe("split");
+test("locating a block shows the source in its last layout", () => {
+  expect(modeOf(run({ ...live, base: "preview" }, { type: "locate" }))).toBe("edit");
+  expect(modeOf(run({ ...live, base: "preview", layout: "split" }, { type: "locate" }))).toBe("split");
+  expect(modeOf(run({ ...live, base: "preview", source: "split", layout: "split" }, { type: "locate" }))).toBe("split");
 });

@@ -85,8 +85,8 @@ export function SourceEditor({ text, inline, focus, wide, initialCursor, assist 
     if (initialCursor) {
       const line = v.state.doc.line(Math.min(initialCursor.line, v.state.doc.lines));
       const pos = Math.min(line.from + initialCursor.col - 1, line.to);
-      // Beside the preview, the scroll position follows the preview instead.
-      v.dispatch({ selection: { anchor: pos }, effects: wide ? EditorView.scrollIntoView(pos, { y: "center" }) : [] });
+      // The page places the editor where the reader was, which is not always where the caret was left.
+      v.dispatch({ selection: { anchor: pos } });
     }
     v.scrollDOM.addEventListener("scroll", () => callbacks.current.onScroll?.(), { passive: true });
     view.current = v;
