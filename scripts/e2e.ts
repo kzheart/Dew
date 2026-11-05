@@ -16,7 +16,7 @@
  */
 import { $ } from "bun";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { deflateSync } from "node:zlib";
@@ -371,11 +371,16 @@ async function documentChecks() {
     await settle();
 
     // Another app changes the file while the page has no unsaved edits: the page reloads it.
+    // The page is already saved, so the tear can't tell when this save lands; the file it replaces can.
+    const before = await stat(file);
     await menu("文件", "保存");
-    await waitFor("the save", () => isSaved(page));
+    await waitFor("the save on disk", async () => {
+      const now = await stat(file);
+      return now.ino !== before.ino || now.mtimeMs !== before.mtimeMs;
+    });
     await writeFile(file, (await readFile(file, "utf8")) + "\n外部修改的一行。\n");
     const reloaded = await waitFor("the reload", async () => (await text("article")).includes("外部修改的一行")).catch(() => false);
-    const held = reloaded || { tear: (await currentFile(page))?.tear, inDoc: (await content()).includes("外部修改的一行") };
+    const held = reloaded || { tear: (await currentFile(page))?.tear, inDoc: (await content()).includes("外部修改的一行"), onDisk: (await readFile(file, "utf8")).includes("外部修改的一行") };
     check("a change on disk reloads the document", reloaded, reloaded ? "" : `after 8 s the page still shows the old text: ${JSON.stringify(held)}`);
 
     // With unsaved edits it is a conflict, which the title glass offers to settle.
