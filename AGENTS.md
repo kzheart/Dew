@@ -13,7 +13,8 @@ Every tab is its own window and page. State more than one window shows (preferen
 ## Checks before a commit
 
 - `bun run typecheck` and `bun test src` pass.
-- A change to anything a user can see or do runs the e2e section that covers it, and updates that section in the same commit when the behavior changed on purpose. A commit that changes behavior and leaves its e2e checks asserting the old behavior breaks the suite for every other session.
+- e2e runs in CI (the `e2e` job of `.github/workflows/ci.yml`) on every pull request and push to `main`, not on the developer's machine: it opens real app windows and takes minutes. Run a section locally only when asked to.
+- A change to anything a user can see or do updates the e2e section that covers it in the same commit when the behavior changed on purpose. A commit that changes behavior and leaves its e2e checks asserting the old behavior breaks the suite for everyone.
 
   | Section | Covers |
   | --- | --- |
@@ -23,6 +24,8 @@ Every tab is its own window and page. State more than one window shows (preferen
   | `share` | live table controls, the share card dialog, PDF page protection |
   | `tabs` | several files as tabs, the dock, the light table and its recently closed files, reopening where a file was read, ⌘P 快速打开 |
   | `welcome` | the welcome window while no file is open: its 最近 list, palette and light table, 新建 |
+
+  When asked to run one locally:
 
   ```sh
   bun scripts/e2e.ts tabs            # one section, ~1 min
