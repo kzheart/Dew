@@ -371,11 +371,19 @@ async function documentChecks() {
     await settle();
 
     // Another app changes the file while the page has no unsaved edits: the page reloads it.
+    const probe = (m: string, ...a: unknown[]) => page(`return await mygo.call(${JSON.stringify(`WatchProbe.${m}`)}, ...${JSON.stringify(a)})`);
+    await probe("Start", file);
+    const statBefore = await probe("Stat", file);
     await menu("文件", "保存");
     await waitFor("the save", () => isSaved(page));
+    await probe("Mark", "saved");
+    const statSaved = await probe("Stat", file);
     await writeFile(file, (await readFile(file, "utf8")) + "\n外部修改的一行。\n");
+    await probe("Mark", "written");
+    const statWritten = await probe("Stat", file);
     const reloaded = await waitFor("the reload", async () => (await text("article")).includes("外部修改的一行")).catch(() => false);
-    const held = reloaded || { tear: (await currentFile(page))?.tear, inDoc: (await content()).includes("外部修改的一行") };
+    console.log("DIAG", JSON.stringify({ reloaded, statBefore, statSaved, statWritten, log: await probe("Log") }));
+    const held = reloaded || { tear: (await currentFile(page))?.tear, inDoc: (await content()).includes("外部修改的一行"), onDisk: (await readFile(file, "utf8")).includes("外部修改的一行"), statNow: await probe("Stat", file) };
     check("a change on disk reloads the document", reloaded, reloaded ? "" : `after 8 s the page still shows the old text: ${JSON.stringify(held)}`);
 
     // With unsaved edits it is a conflict, which the title glass offers to settle.

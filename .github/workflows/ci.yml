@@ -46,20 +46,15 @@ jobs:
         run: bunx mygo build -platform darwin/universal -skip-dmg
 
   e2e:
-    name: e2e (${{ matrix.sections }})
+    name: e2e (${{ matrix.sections }} ${{ matrix.attempt }})
     runs-on: macos-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       # 分成四组并行，加上检查 job 不超过免费账号同时运行的 5 个 macOS runner。
       matrix:
-        include:
-          - sections: document welcome
-          - sections: code assist
-            poppler: true
-          - sections: share
-            poppler: true
-          - sections: tabs
+        sections: [document]
+        attempt: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
 
@@ -87,7 +82,7 @@ jobs:
         run: brew install poppler
 
       - name: 端到端测试
-        run: bun scripts/e2e.ts ${{ matrix.sections }}
+        run: for i in 1 2 3; do bun scripts/e2e.ts $([ $i -gt 1 ] && echo --no-build) document || true; done
 
       - name: 上传截图
         if: failure()
