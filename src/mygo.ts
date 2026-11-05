@@ -89,6 +89,19 @@ export interface Handoff {
   role: string;
 }
 
+/**
+ * Inspector is the 设置 inspector of a tab group, which every tab of the
+ * group shows alike.
+ */
+export interface Inspector {
+  open: boolean;
+  /**
+   * Group is the group of settings it shows: look, edit, file, export
+   * or keys.
+   */
+  group: string;
+}
+
 /** Mode is the view a window shows. */
 export type Mode = "live" | "preview" | "edit" | "split";
 
@@ -271,6 +284,10 @@ export const Files = {
   folder(): Promise<FolderFile[]> {
     return call("Files.Folder");
   },
+  /** Inspector returns the inspector of the calling window's tab group. */
+  inspector(): Promise<Inspector> {
+    return call("Files.Inspector");
+  },
   /**
    * List returns the documents of the calling window's tab group, in tab
    * order.
@@ -306,6 +323,13 @@ export const Files = {
   /** Select shows the document of the tab group's window id. */
   select(id: number): Promise<void> {
     return call("Files.Select", id);
+  },
+  /**
+   * SetInspector sets the inspector of the calling window's tab group, and
+   * tells the group's other tabs.
+   */
+  setInspector(in_: Inspector): Promise<void> {
+    return call("Files.SetInspector", in_);
   },
 } as const;
 
@@ -456,6 +480,11 @@ export const Assets = {
 /** Events sent by the Go side. Subscribe with `events.name.on(listener)`. */
 export const events = {
   handoff: event<Handoff>("handoff"),
+  /**
+   * Inspectors tells the other tabs of a group what one changed of the
+   * group's inspector.
+   */
+  inspector: event<Inspector>("inspector"),
   /** Commands carries menu commands to the page of the focused window. */
   command: event<Command>("command"),
   /**

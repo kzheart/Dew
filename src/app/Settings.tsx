@@ -57,17 +57,20 @@ const resetLabels: Partial<Record<keyof Prefs, string>> = {
 const KEEP_STEP = 10;
 
 /** 设置: the defaults every document starts with, by group or by search. */
-export function Settings({ prefs, base, leaving, onPrefs, onBase, onClearRecent, onClose }: {
+export function Settings({ prefs, base, leaving, group, onGroup, onPrefs, onBase, onClearRecent, onClose }: {
   prefs: Prefs;
   /** The view this window shows, which new windows open in. */
   base: Base;
   leaving: boolean;
+  group: SettingsGroup;
+  onGroup(g: SettingsGroup): void;
   onPrefs(p: Partial<Prefs>): void;
   onBase(b: Base): void;
   onClearRecent(): void;
   onClose(): void;
 }) {
-  const [group, setGroup] = useState<SettingsGroup>("look");
+  // Opened in a background tab, it is already there when the tab shows.
+  const [unseen] = useState(() => document.hidden);
   const [q, setQ] = useState("");
   const searching = q.trim() !== "";
   const groups = shownRows(group, q);
@@ -190,7 +193,7 @@ export function Settings({ prefs, base, leaving, onPrefs, onBase, onClearRecent,
   };
 
   return (
-    <aside className={leaving ? "insp out" : "insp"} aria-label="设置">
+    <aside className={`insp${leaving ? " out" : ""}${unseen ? " unseen" : ""}`} aria-label="设置">
       <div className="insp-head">
         <h2>设置</h2>
         <button className="gbtn insp-x" onClick={onClose} aria-label="关闭设置">
@@ -211,7 +214,7 @@ export function Settings({ prefs, base, leaving, onPrefs, onBase, onClearRecent,
         {!searching && (
           <div className="sseg" role="group" aria-label="设置分组">
             {(Object.keys(groupLabels) as SettingsGroup[]).map((g) => (
-              <button key={g} aria-pressed={group === g} onClick={() => setGroup(g)}>{groupLabels[g]}</button>
+              <button key={g} aria-pressed={group === g} onClick={() => onGroup(g)}>{groupLabels[g]}</button>
             ))}
           </div>
         )}

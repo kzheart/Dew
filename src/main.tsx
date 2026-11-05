@@ -15,14 +15,15 @@ switch (pageOf(location.search)) {
     root.render(<Welcome prefs={await prefs} part={await host.files.part().catch(() => ({ kind: "", role: "" }))} />);
     break;
   case "document": {
-    const [text, state, files, resume, part] = await Promise.all([
+    const [text, state, files, resume, part, inspector] = await Promise.all([
       host.doc.content(),
       host.doc.state(),
       host.files.list(),
       host.recent.resume().catch(() => 0),
       host.files.part().catch(() => ({ kind: "", role: "" })),
+      host.files.inspector().catch(() => ({ open: false, group: "look" as const })),
     ]);
-    root.render(<App initial={{ text, state, prefs: await prefs, files, resume, part }} />);
+    root.render(<App initial={{ text, state, prefs: await prefs, files, resume, part, inspector }} />);
     break;
   }
 }

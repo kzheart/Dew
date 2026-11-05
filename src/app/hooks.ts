@@ -44,3 +44,19 @@ export function useDebouncedEffect<T>(value: T, ms: number, fn: (v: T) => void) 
     return () => clearTimeout(t);
   }, [key, ms]);
 }
+
+/**
+ * Lets a page in a background tab take a change without transitions: they don't run while it is
+ * hidden, and would play out once it shows. They come back once it has shown.
+ */
+export function settleUnseen() {
+  const root = document.documentElement;
+  if (!document.hidden || root.classList.contains("still")) return;
+  root.classList.add("still");
+  const shown = () => {
+    if (document.hidden) return;
+    document.removeEventListener("visibilitychange", shown);
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.remove("still")));
+  };
+  document.addEventListener("visibilitychange", shown);
+}

@@ -4,8 +4,15 @@ import { defaultPrefs } from "./defaultPrefs";
 import * as go from "./mygo";
 import type { CardBackground, Command, DocumentState, FileTab, FolderFile, Handoff, PageGuard, Prefs, PrefsChange, RecentFile, ViewState } from "./mygo";
 import { changedKeys } from "./state/prefs";
+import type { SettingsGroup } from "./state/settings";
 
 export type { CardBackground, Command, DocumentState, FileTab, FolderFile, Handoff, PageGuard, Prefs, RecentFile };
+
+/** The 设置 inspector, alike across the tabs of a group. */
+export interface Inspector {
+  open: boolean;
+  group: SettingsGroup;
+}
 
 /** What the page needs from its host: the app's Go services, or stand-ins in a browser tab. */
 export interface Host {
@@ -43,6 +50,11 @@ export interface Host {
     create(name: string): Promise<void>;
     /** What the dock shows now and as it changes. */
     follow(fn: (tabs: FileTab[]) => void): () => void;
+    inspector(): Promise<Inspector>;
+    /** Sets the inspector of every tab of the group. */
+    setInspector(i: Inspector): Promise<void>;
+    /** The inspector as other tabs of the group change it. */
+    followInspector(fn: (i: Inspector) => void): () => void;
   };
   /** The files windows closed, with how far they were read. */
   recent: {
@@ -96,7 +108,13 @@ function appHost(): Host {
       followState: (fn) => follow(onDocumentState, go.Doc.state, fn),
       onReload: onDocumentReload,
     },
-    files: { ...go.Files, follow: (fn) => follow((f) => go.events.files.on(f), go.Files.list, fn), onHandoff: (fn) => go.events.handoff.on(fn) },
+    files: {
+      ...go.Files,
+      follow: (fn) => follow((f) => go.events.files.on(f), go.Files.list, fn),
+      onHandoff: (fn) => go.events.handoff.on(fn),
+      inspector: () => go.Files.inspector() as Promise<Inspector>,
+      followInspector: (fn) => follow((f) => go.events.inspector.on((i) => f(i as Inspector)), () => go.Files.inspector() as Promise<Inspector>, fn),
+    },
     recent: { ...go.Recent, follow: (fn) => follow((f) => go.events.recent.on(f), go.Recent.list, fn) },
     prefs: {
       ...go.Prefs,
@@ -181,6 +199,9 @@ async function browserHost(): Promise<Host> {
         fn(tabs());
         return () => fileListeners.delete(fn);
       },
+      inspector: async () => ({ open: false, group: "look" }),
+      setInspector: async () => {},
+      followInspector: () => () => {},
     },
     recent: {
       list: async () => [],

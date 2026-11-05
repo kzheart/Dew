@@ -45,6 +45,9 @@ type filesService struct {
 	// which hands its place over before it closes.
 	unlisted map[*mygo.Window]listing
 	handoffs []*handoff
+	// inspectors is each document window's Inspector, alike across a
+	// tab group.
+	inspectors map[int]Inspector
 }
 
 type listing int
@@ -196,6 +199,7 @@ func (s *filesService) host() *mygo.Window {
 // in under the mist; as a background tab, it draws before it shows. Its
 // first list goes out once mygo attached doc to win and told its state.
 func (s *filesService) adopt(win, from *mygo.Window, doc *mygo.Document[string]) {
+	s.inheritInspector(win, from)
 	if from != nil {
 		kind := "open"
 		if doc.State().Path == "" {
@@ -214,6 +218,7 @@ func (s *filesService) adopt(win, from *mygo.Window, doc *mygo.Document[string])
 		s.refresh()
 	})
 	win.OnClosed(func() {
+		s.forgetInspector(win)
 		s.setListing(win, 0)
 		s.recent.closedWindow(win, path)
 		s.refresh()

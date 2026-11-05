@@ -936,6 +936,7 @@ main{transition:transform .5s cubic-bezier(.3,1.1,.4,1),filter .4s ease}
 .app.set-on .dock{left:calc((100% - 440px) / 2)}
 .insp{position:absolute;top:64px;right:14px;bottom:14px;width:412px;z-index:24;border-radius:28px;background:rgba(calc(252 - var(--g)*.8),calc(252 - var(--g)*.8),calc(253 - var(--g)*.5),calc(.55 + var(--g)*.04));-webkit-backdrop-filter:blur(calc(12px + var(--g)*4.5px)) saturate(calc(220% - var(--g)*8%));backdrop-filter:blur(calc(12px + var(--g)*4.5px)) saturate(calc(220% - var(--g)*8%));box-shadow:inset 0 1px 0 rgba(255,255,255,.95),inset 0 0 0 .5px rgba(255,255,255,.6),0 0 0 .5px rgba(0,0,0,.08),0 24px 60px rgba(0,0,0,.16);display:flex;flex-direction:column;overflow:hidden;color:#1D1D1F;animation:inspIn .6s cubic-bezier(.3,1.25,.45,1) both}
 .insp.out{animation:inspOut .24s cubic-bezier(.4,0,1,1) both;pointer-events:none}
+.insp.unseen:not(.out){animation:none}
 @keyframes inspIn{from{opacity:0;transform:translateX(48px) scale(.97)}}
 @keyframes inspOut{to{opacity:0;transform:translateX(40px) scale(.97)}}
 .insp::before{content:"";position:absolute;inset:0;z-index:-1;background:var(--grain);opacity:var(--gl-grain);pointer-events:none}
@@ -992,4 +993,5 @@ main{transition:transform .5s cubic-bezier(.3,1.1,.4,1),filter .4s ease}
 .insp-foot{padding:12px 18px 16px;border-top:.5px solid rgba(0,0,0,.08);font-size:11.5px;opacity:.75;display:flex;align-items:center;gap:8px}
 .aa-more{border:0;background:transparent;color:#0A56B3;font-size:12px;text-align:left;padding:2px 0 0;cursor:default}
 .th-night .aa-more{color:#8DB6F7}
-
+/* A background tab takes changes as they end: see settleUnseen. */
+.still *,.still *::before,.still *::after{transition:none !important}

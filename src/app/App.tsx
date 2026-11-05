@@ -14,7 +14,7 @@ import { toggleTask } from "../markdown/source";
 import { Article } from "../preview/Article";
 import { playEntrance } from "../preview/entrance";
 import type { BlockActions, LightboxTarget } from "../preview/actions";
-import { host, type Command, type DocumentState, type FileTab, type Handoff, type Prefs } from "../platform";
+import { host, type Command, type DocumentState, type FileTab, type Handoff, type Inspector, type Prefs } from "../platform";
 import { fileName } from "../state/recent";
 import { glassStyle } from "../state/settings";
 import { modeOf, viewReducer, type ViewState } from "../state/view";
@@ -31,6 +31,7 @@ import { Toasts, useToasts } from "./Toasts";
 import { useDocument } from "./useDocument";
 import { useFiles } from "./useFiles";
 import { useReadingProgress } from "./useReadingProgress";
+import { useInspector } from "./useInspector";
 import { usePrefs } from "./usePrefs";
 import { useRecent } from "./useRecent";
 import { useScrollSync } from "./useScrollSync";
@@ -44,6 +45,7 @@ export interface Initial {
   /** How far the document was read when it last closed, from 0 to 1. */
   resume: number;
   part: Handoff;
+  inspector: Inspector;
 }
 
 export function App({ initial }: { initial: Initial }) {
@@ -80,17 +82,19 @@ export function App({ initial }: { initial: Initial }) {
   const openOverview = () => {
     setPopover(null);
     setFinding(false);
-    setSetting(false);
+    setInspector({ open: false });
     setOverview(true);
   };
-  const [setting, setSetting] = useState(false);
-  const inspector = usePresence(setting, 240);
-  const closeSettings = useCallback(() => setSetting(false), []);
+  const [shared, setInspector] = useInspector(initial.inspector);
+  const setting = shared.open;
+  // A background tab that closes it shows nothing of it leaving.
+  const inspector = usePresence(setting, document.hidden ? 0 : 240);
+  const closeSettings = useCallback(() => setInspector({ open: false }), [setInspector]);
   const openSettings = () => {
     setPopover(null);
     setOverview(false);
     setFinding(false);
-    setSetting(true);
+    setInspector({ open: true });
   };
   const [finding, setFinding] = useState(false);
   const palette = usePresence(finding, 200);
@@ -432,6 +436,8 @@ export function App({ initial }: { initial: Initial }) {
           prefs={prefs}
           base={view.base}
           leaving={inspector.leaving}
+          group={shared.group}
+          onGroup={(group) => setInspector({ group })}
           onPrefs={updatePrefs}
           onBase={(base) => dispatch({ type: "base", base })}
           onClearRecent={() => void host.recent.clear().catch(() => {})}

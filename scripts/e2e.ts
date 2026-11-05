@@ -1047,32 +1047,58 @@ async function tabChecks() {
     check("clicking the other file in the dock shows its window instead", !!flipped, JSON.stringify(await shown()));
     await checkTitleBars("after switching files");
 
-    // 设置 is the app's, not a tab's: a background picked in one tab shows in the others.
-    const paperOf = (page: Session["page"]) => page<string>(`return getComputedStyle(document.querySelector('section[aria-label="实时编辑"]')).backgroundColor`);
-    const pickBackground = async (label: string) => {
-      top = await front();
-      await top.s.page(`document.querySelector('[aria-label="排版设置"]').click()`);
-      await waitFor("the Aa popover's link", () => top.s.page<boolean>(`return !!document.querySelector(".pop-aa .aa-more")`));
-      await top.s.page(`document.querySelector(".pop-aa .aa-more").click()`);
-      await waitFor("the settings inspector", () => top.s.page<boolean>(`return !!document.querySelector('aside[aria-label="设置"] [aria-label="${label}"]')`));
-      await top.s.page(`document.querySelector('aside[aria-label="设置"] [aria-label="${label}"]').click()`);
-      await top.s.page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
-    };
-    // A page in the background holds its transitions, so the other tab is looked at once it is in front.
-    const otherTabShows = async (color: string) => {
-      const was = top.win.id;
+    // 设置 is the app's, not a tab's: what one tab changes, the others show already in place as they come to the front.
+    const inspectorOf = `document.querySelector('aside[aria-label="设置"]')`;
+    const inSettings = (label: string) => top.s.page(`${inspectorOf}.querySelector('[aria-label="${label}"]').click()`);
+    const showGroup = (name: string) => top.s.page(`[...${inspectorOf}.querySelectorAll('[aria-label="设置分组"] button')].find((b) => b.textContent === "${name}").click()`);
+    // What a background page shows the moment it comes to the front.
+    const watchArrival = `window.e2eArrival = undefined; document.addEventListener("visibilitychange", () => {
+      const i = ${inspectorOf};
+      window.e2eArrival = {
+        paper: getComputedStyle(document.querySelector('section[aria-label="实时编辑"]')).backgroundColor,
+        inspector: !!i,
+        group: i?.querySelector('[aria-label="设置分组"] [aria-pressed="true"]')?.textContent ?? null,
+        moving: i ? i.getAnimations().filter((a) => a.playState === "running").length : 0,
+      };
+    }, { once: true })`;
+    interface Arrival { paper: string; inspector: boolean; group: string | null; moving: number }
+    const switchTab = async () => {
+      const other = opened.find((w) => w.id !== top.win.id)!.id;
+      await s.at(other).page(watchArrival);
       await top.s.page(`document.querySelector(".dk:not(.on) .dk-btn").click()`);
-      return settled(`the other tab to show ${color}`, async () => {
+      const arrival = await settled("the other tab in front", async () => {
         const ids = await shown();
-        return ids.length === 1 && ids[0] !== was && (await paperOf(s.at(ids[0]!).page)) === color;
+        return ids.length === 1 && ids[0] === other && (await s.at(other).page<Arrival | undefined>(`return window.e2eArrival`));
       });
+      top = await front();
+      return arrival;
     };
-    await pickBackground("羊皮纸");
-    const paper = await otherTabShows("rgb(244, 236, 218)");
-    check("picking 羊皮纸 in 设置 of one tab turns the other tab's page to it too", !!paper, await paperOf((await front()).s.page));
-    await pickBackground("纯白");
-    const white = await otherTabShows("rgb(255, 255, 255)");
-    check("and 纯白 back again from that tab", !!white, await paperOf((await front()).s.page));
+
+    top = await front();
+    await top.s.page(`document.querySelector('[aria-label="排版设置"]').click()`);
+    await waitFor("the Aa popover's link", () => top.s.page<boolean>(`return !!document.querySelector(".pop-aa .aa-more")`));
+    await top.s.page(`document.querySelector(".pop-aa .aa-more").click()`);
+    await waitFor("the settings inspector", () => top.s.page<boolean>(`return !!${inspectorOf}?.querySelector('[aria-label="羊皮纸"]')`));
+    await inSettings("羊皮纸");
+    await showGroup("编辑");
+    // The change reaches the other tab after the 300 ms the page waits to save it.
+    await Bun.sleep(900);
+    let arrival = await switchTab();
+    check("picking 羊皮纸 in 设置 of one tab shows the other tab on it the moment it comes to the front, with no fade", arrival?.paper === "rgb(244, 236, 218)", JSON.stringify(arrival));
+    check("设置 stays open on the same group across tabs, already in place as the tab shows", arrival?.inspector === true && arrival.group === "编辑" && arrival.moving === 0, JSON.stringify(arrival));
+    await showGroup("外观");
+    await waitFor("the 外观 group", () => top.s.page<boolean>(`return !!${inspectorOf}?.querySelector('[aria-label="纯白"]')`));
+    await inSettings("纯白");
+    await Bun.sleep(900);
+    arrival = await switchTab();
+    check("and 纯白 back again from that tab", arrival?.paper === "rgb(255, 255, 255)" && arrival.inspector && arrival.group === "外观" && arrival.moving === 0, JSON.stringify(arrival));
+    await top.s.page(`document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))`);
+    await waitFor("the inspector to close", () => top.s.page<boolean>(`return !${inspectorOf}`));
+    await Bun.sleep(300);
+    arrival = await switchTab();
+    check("closing 设置 in one tab closes it in the others", arrival?.inspector === false, JSON.stringify(arrival));
+    // Back to the tab the checks after this one start in.
+    await switchTab();
 
     top = await front();
     const editedName = top.win.title;

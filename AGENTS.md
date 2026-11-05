@@ -4,10 +4,11 @@ A cross-platform desktop Markdown editor (macOS today, Windows planned): a Go sh
 
 ## State shared across windows
 
-Every tab is its own window and page. State more than one window shows (preferences, recent files, the dock) lives in Go, and each page holds a copy:
+Every tab is its own window and page. State more than one window shows (preferences, recent files, the dock, the 设置 inspector) lives in Go, and each page holds a copy:
 
-- In Go, each store has one write path that tells the windows: `prefsStore.Update`, `recentService.change`. What Go derives from the preferences follows them through `prefsStore.watch`.
-- In the page, read it through the host's `follow` (`host.prefs.follow`, `host.recent.follow`, `host.files.follow`, `host.doc.followState`), which listens before it reads and drops a read that a change overtook.
+- In Go, each store has one write path that tells the windows: `prefsStore.Update`, `recentService.change`, `filesService.SetInspector`. What Go derives from the preferences follows them through `prefsStore.watch`.
+- In the page, read it through the host's `follow` (`host.prefs.follow`, `host.recent.follow`, `host.files.follow`, `host.files.followInspector`, `host.doc.followState`), which listens before it reads and drops a read that a change overtook.
+- A page in a background tab takes a change already finished, as the tab shows it: `settleUnseen` holds its transitions, and a panel it mounts there skips its entrance.
 
 ## Checks before a commit
 

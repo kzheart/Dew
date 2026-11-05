@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { host, type Prefs } from "../platform";
 import { changedKeys, sharedChange } from "../state/prefs";
-import { useDebouncedEffect } from "./hooks";
+import { settleUnseen, useDebouncedEffect } from "./hooks";
 
 /**
  * The preferences as the window reads them, with what other windows change, and saving what it
@@ -21,6 +21,7 @@ export function usePrefs(initial: Prefs, view?: Pick<Prefs, "base" | "source">):
     () =>
       host.prefs.follow(initial, (p, keys) => {
         const change = sharedChange(p, keys);
+        if (Object.keys(change).length) settleUnseen();
         // Saved as taken, so that this window doesn't send it back.
         saved.current = { ...saved.current, ...change };
         update(change);
