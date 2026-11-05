@@ -53,15 +53,16 @@ export function App({ initial }: { initial: Initial }) {
   const files = useFiles(initial.files);
   const joined = initial.files.length > 1;
   const recent = useRecent();
+  // A new document opens to be written in; its view isn't saved as the one others open in.
+  const startPrefs: Prefs = !initial.state.path && !initial.text ? { ...initial.prefs, base: "live", source: "off" } : initial.prefs;
   const [view, dispatch] = useReducer(viewReducer, {
-    base: initial.prefs.base,
-    source: initial.prefs.source === "off" ? null : initial.prefs.source,
+    base: startPrefs.base,
+    source: startPrefs.source === "off" ? null : startPrefs.source,
     layout: initial.prefs.source === "split" ? "split" : "full",
   } satisfies ViewState);
   const mode = modeOf(view);
   const [focus, setFocus] = useState(false);
   const [popover, setPopover] = useState<Popover | null>(null);
-  const [compact, setCompact] = useState(false);
   const [toc, setToc] = useState<{ line: number | null; pct: number }>({ line: null, pct: 0 });
   const [cursor, setCursor] = useState<Cursor | null>(null);
   const [split, setSplit] = useState(50);
@@ -121,7 +122,7 @@ export function App({ initial }: { initial: Initial }) {
   );
 
   const sourcePref: Prefs["source"] = view.source ?? "off";
-  const [prefs, updatePrefs] = usePrefs(initial.prefs, { base: view.base, source: sourcePref });
+  const [prefs, updatePrefs] = usePrefs(startPrefs, { base: view.base, source: sourcePref });
 
   const pvRef = useRef<HTMLDivElement>(null);
   const articleRef = useRef<HTMLElement>(null);
@@ -140,24 +141,11 @@ export function App({ initial }: { initial: Initial }) {
     const from = prevMode.current;
     prevMode.current = mode;
     // Double-clicking a block places the editor at that block instead.
-    if (from === mode || !showEd || pendingLocate.current !== null) return;
+    if (from === mode || !showEd) return;
     // The second frame, once CodeMirror has measured its lines at the pane's new width.
     let id = requestAnimationFrame(() => (id = requestAnimationFrame(() => sync.restore("editor"))));
     return () => cancelAnimationFrame(id);
   }, [mode]);
-  const lastY = useRef<Record<string, number>>({});
-  const trackScroll = (el: HTMLElement, key: string) => {
-    trackProgress(el);
-    const y = el.scrollTop;
-    const last = lastY.current[key] ?? 0;
-    lastY.current[key] = y;
-    if (popover) return;
-    let c = compact;
-    if (y < 40) c = false;
-    else if (y - last > 6) c = true;
-    else if (last - y > 6) c = false;
-    if (c !== compact) setCompact(c);
-  };
 
   const updateToc = useCallback(() => {
     const pv = pvRef.current;
@@ -199,19 +187,13 @@ export function App({ initial }: { initial: Initial }) {
     settle();
   };
 
-  const pendingLocate = useRef<number | null>(null);
+  // Double-click in the split preview: the source beside it goes to the block.
   const locate = useCallback((line: number) => {
-    pendingLocate.current = line;
-    dispatch({ type: "locate" });
-  }, []);
-  useEffect(() => {
     const v = edView.current;
-    const line = pendingLocate.current;
-    if (!v || line === null) return;
-    pendingLocate.current = null;
+    if (!v) return;
     locateLine(v, line);
     v.focus();
-  });
+  }, []);
 
   const { edit } = doc;
   const docName = doc.state.name;
@@ -343,7 +325,7 @@ export function App({ initial }: { initial: Initial }) {
   const theme = prefs.bg === "night" ? " th-night" : prefs.bg === "paper" ? " th-paper" : "";
 
   return (
-    <div style={glassStyle(prefs.glass)} className={`app${theme}${isSplit ? " is-split" : ""}${compact ? " compact" : ""}${overview ? " lt-on" : ""}${setting ? " set-on" : ""}${joined ? " joined" : ""}`}>
+    <div style={glassStyle(prefs.glass)} className={`app${theme}${isSplit ? " is-split" : ""}${popover ? "" : " compact"}${overview ? " lt-on" : ""}${setting ? " set-on" : ""}${joined ? " joined" : ""}`}>
       <main className="main">
         {showEd && (
           <section className={`pane-ed bg-${prefs.bg}`} aria-label="源码编辑" style={{ flex: isSplit ? `0 0 ${split}%` : "1 1 auto" }}>
@@ -358,7 +340,7 @@ export function App({ initial }: { initial: Initial }) {
               onChange={edit}
               onCursor={setCursor}
               onScroll={() => {
-                if (edView.current) trackScroll(edView.current.scrollDOM, "e");
+                if (edView.current) trackProgress(edView.current.scrollDOM);
                 sync.fromEditor(isSplit);
               }}
             />
@@ -372,7 +354,7 @@ export function App({ initial }: { initial: Initial }) {
             className="pv-scroll"
             ref={pvRef}
             onScroll={(e) => {
-              trackScroll(e.currentTarget, "p");
+              trackProgress(e.currentTarget);
               updateToc();
               sync.fromPreview(isSplit);
             }}
@@ -380,7 +362,7 @@ export function App({ initial }: { initial: Initial }) {
               if (e.target === e.currentTarget && live && window.getSelection()?.isCollapsed !== false) live.onBlank();
             }}
           >
-            <Article doc={parsed} typography={prefs} focus={focus} actions={actions} live={live} onLocate={locate} articleRef={articleRef} />
+            <Article doc={parsed} typography={prefs} focus={focus} actions={actions} live={live} onLocate={isSplit ? locate : undefined} articleRef={articleRef} />
           </div>
           <Toc headings={parsed.headings} active={toc.line} pct={toc.pct} onJump={jump} />
         </section>

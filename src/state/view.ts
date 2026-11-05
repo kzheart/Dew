@@ -17,9 +17,7 @@ export type ViewAction =
   | { type: "toggleSource" }
   | { type: "layout"; layout: Layout }
   /** ⌘/ and ⌥⌘/: show the source in a layout, or hide it when it already shows that way. */
-  | { type: "toggleLayout"; layout: Layout }
-  /** Double-click in the preview: show the source, in the layout it last showed in. */
-  | { type: "locate" };
+  | { type: "toggleLayout"; layout: Layout };
 
 export function modeOf(s: ViewState): Mode {
   if (s.source === "full") return "edit";
@@ -37,8 +35,6 @@ export function viewReducer(s: ViewState, a: ViewAction): ViewState {
       return s.source ? { ...s, source: a.layout, layout: a.layout } : s;
     case "toggleLayout":
       return { ...s, source: s.source === a.layout ? null : a.layout, layout: a.layout };
-    case "locate":
-      return { ...s, source: s.source ?? s.layout };
   }
 }
 

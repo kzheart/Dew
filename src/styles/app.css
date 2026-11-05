@@ -609,7 +609,7 @@ header .ig{animation:dropIn .65s cubic-bezier(.3,1.3,.45,1) .22s backwards}
 .share-panel{animation:zoomIn .55s cubic-bezier(.3,1.25,.45,1) both}
 .share.out .share-panel{animation:zoomOut .2s cubic-bezier(.4,0,1,1) both}
 
-/* Compact toolbar on scroll */
+/* The toolbar stays compact until the pointer is on it */
 header.bar{transition:padding .45s cubic-bezier(.3,1.25,.45,1)}
 .lbl{display:inline-block;max-width:64px;margin-left:6px;overflow:hidden;white-space:nowrap;vertical-align:middle;transition:max-width .45s cubic-bezier(.3,1.2,.45,1),margin .45s cubic-bezier(.3,1.2,.45,1),opacity .25s ease}
 .seg-g .sb{gap:0;transition:transform .4s cubic-bezier(.3,1.6,.5,1),width .5s cubic-bezier(.3,1.25,.45,1),color .2s ease}
@@ -622,7 +622,7 @@ header.bar{transition:padding .45s cubic-bezier(.3,1.25,.45,1)}
 .stat{transform-origin:left bottom;transition:transform .45s cubic-bezier(.3,1.3,.45,1),opacity .3s ease,background-color .4s ease}
 .edge{transition:height .45s ease}
 .app.compact header.bar:not(:hover){padding-top:8px}
-.app.compact header.bar:not(:hover) .gtitle{opacity:0;transform:translateX(-10px) scale(.9);max-width:0;padding:0;pointer-events:none}
+.app.compact header.bar:not(:hover) .gtitle:not(.conflict){opacity:0;transform:translateX(-10px) scale(.9);max-width:0;padding:0;pointer-events:none}
 .app.compact header.bar:not(:hover) .lbl{max-width:0;margin-left:0;opacity:0}
 .app.compact header.bar:not(:hover) .seg-g .sb{width:44px}
 .app.compact header.bar:not(:hover) .thumb{width:44px;top:1px}

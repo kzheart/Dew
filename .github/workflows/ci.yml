@@ -55,6 +55,9 @@ jobs:
       - name: 安装依赖
         run: bun install --frozen-lockfile
 
+      - name: 安装 PDF 与图片工具
+        run: brew install poppler imagemagick
+
       - name: 端到端测试
         run: bun scripts/e2e.ts
 

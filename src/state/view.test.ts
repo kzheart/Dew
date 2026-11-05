@@ -37,9 +37,3 @@ test("shortcuts toggle their layout", () => {
   expect(modeOf(run(live, { type: "toggleLayout", layout: "split" }, { type: "toggleLayout", layout: "split" }))).toBe("live");
   expect(modeOf(run(live, { type: "toggleLayout", layout: "split" }, { type: "toggleLayout", layout: "full" }))).toBe("edit");
 });
-
-test("locating a block shows the source in its last layout", () => {
-  expect(modeOf(run({ ...live, base: "preview" }, { type: "locate" }))).toBe("edit");
-  expect(modeOf(run({ ...live, base: "preview", layout: "split" }, { type: "locate" }))).toBe("split");
-  expect(modeOf(run({ ...live, base: "preview", source: "split", layout: "split" }, { type: "locate" }))).toBe("split");
-});
