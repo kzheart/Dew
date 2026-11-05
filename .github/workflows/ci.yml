@@ -22,6 +22,12 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
       - name: 安装依赖
         run: bun install --frozen-lockfile
 
@@ -40,9 +46,20 @@ jobs:
         run: bunx mygo build -platform darwin/universal -skip-dmg
 
   e2e:
-    name: e2e
+    name: e2e (${{ matrix.sections }})
     runs-on: macos-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      # 分成四组并行，加上检查 job 不超过免费账号同时运行的 5 个 macOS runner。
+      matrix:
+        include:
+          - sections: document welcome
+          - sections: code assist
+            poppler: true
+          - sections: share
+            poppler: true
+          - sections: tabs
     steps:
       - uses: actions/checkout@v4
 
@@ -52,19 +69,30 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
       - name: 安装依赖
         run: bun install --frozen-lockfile
 
-      - name: 安装 PDF 与图片工具
-        run: brew install poppler imagemagick
+      - name: 安装 poppler
+        if: matrix.poppler
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          HOMEBREW_NO_INSTALL_CLEANUP: 1
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+        run: brew install poppler
 
       - name: 端到端测试
-        run: bun scripts/e2e.ts
+        run: bun scripts/e2e.ts ${{ matrix.sections }}
 
       - name: 上传截图
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-out
+          name: e2e-out-${{ strategy.job-index }}
           path: e2e-out
           retention-days: 7

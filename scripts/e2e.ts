@@ -19,6 +19,7 @@ import { existsSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { deflateSync } from "node:zlib";
 import { classifyPaste } from "../src/assist/paste";
 import { slashCommands } from "../src/assist/slash";
 import { Automation } from "./automation";
@@ -61,6 +62,28 @@ async function waitFor<T>(what: string, probe: () => Promise<T | null | undefine
     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
     await Bun.sleep(100);
   }
+}
+
+/** A width × height PNG fading from one RGB colour at the top to another at the bottom. */
+function gradientPng(width: number, height: number, from: number[], to: number[]) {
+  const rows = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y++) {
+    const rgb = from.map((c, i) => Math.round(c + ((to[i]! - c) * y) / (height - 1)));
+    for (let x = 0; x < width; x++) rows.set(rgb, y * (width * 3 + 1) + 1 + x * 3);
+  }
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const head = Buffer.alloc(4);
+    head.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(Bun.hash.crc32(body));
+    return Buffer.concat([head, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr.set([8, 2, 0, 0, 0], 8);
+  return Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
 }
 
 await rm(work, { recursive: true, force: true });
@@ -902,7 +925,7 @@ async function shareTableChecks() {
 
   // 分页保护 › 图片: off, a tall image is sliced across two pages; on, it moves whole to the next page.
   const imageDoc = join(work, "图片分页.md");
-  await $`magick -size 600x820 gradient:#5B8DEF-#F2A385 ${join(work, "tall.png")}`;
+  await writeFile(join(work, "tall.png"), gradientPng(600, 820, [0x5b, 0x8d, 0xef], [0xf2, 0xa3, 0x85]));
   const filler = Array.from({ length: 6 }, (_, i) => `第 ${i + 1} 段填充文字，把图片推到第一页的下半部分，看它放不下时整体移到下一页还是从中间切开。`.repeat(2));
   await writeFile(imageDoc, ["# 图片分页", ...filler, "![高图](tall.png)", "图片之后的一段。", ""].join("\n\n"));
   await session(imageDoc, async ({ page, capture, menu }) => {
