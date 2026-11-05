@@ -127,6 +127,7 @@ interface TitleBar {
   closeX: number;
   closeY: number;
   contentHeight: number;
+  height: number;
   tabBarVisible: boolean;
   selected: boolean;
 }
@@ -1006,7 +1007,9 @@ async function tabChecks() {
     const summary = (ds: Awaited<ReturnType<typeof docks>>) => ds.map(({ win, files }) => `${win.title}: ${files.map((f) => `${f.current ? "*" : ""}${f.name}(${f.tear})`).join(" ")}`).join(" | ");
     const settled = <T>(what: string, probe: () => Promise<T | null | undefined | false>) => waitFor(what, probe).catch(() => null);
     const bars = async () => Promise.all((await s.windows()).map((w) => titleBar(s.at(w.id).page)));
-    const asSingle = (t: TitleBar) => !!singleTitleBar && t.closeX === singleTitleBar.closeX && t.closeY === singleTitleBar.closeY && t.contentHeight === singleTitleBar.contentHeight;
+    // The band above the content, not the window's height: macOS 26 makes a tab group's windows a few points taller.
+    const band = (t: TitleBar) => t.height - t.contentHeight;
+    const asSingle = (t: TitleBar) => !!singleTitleBar && t.closeX === singleTitleBar.closeX && t.closeY === singleTitleBar.closeY && band(t) === band(singleTitleBar);
     const checkTitleBars = async (when: string) => {
       const b = await bars();
       check(`${when}, the tab bar stays hidden and the traffic lights sit where a single window has them`, b.every(asSingle) && b.filter((t) => t.selected).length === 1, JSON.stringify({ single: singleTitleBar, tabs: b }));
