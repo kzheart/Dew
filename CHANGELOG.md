@@ -2,6 +2,24 @@
 
 本项目的所有重要变更都记录在此文件中。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。自 0.1.0 之后的条目由 [release-please](https://github.com/googleapis/release-please) 根据提交信息自动生成。
 
+## [0.2.0](https://github.com/kzheart/Dew/compare/v0.1.0...v0.2.0) (2026-11-05)
+
+
+### 新功能
+
+* **tabs:** 设置面板在同组标签页间同步，后台标签页直接呈现结果 ([aebb7e2](https://github.com/kzheart/Dew/commit/aebb7e2effbc5d336e9209632f018e41390b3802))
+
+
+### 问题修复
+
+* **tabs:** 跨窗口共享的状态统一由 Go 推送，页面先订阅再读取 ([7a403c7](https://github.com/kzheart/Dew/commit/7a403c75af90ac63bfc5338e1e535eb6ecd694b4))
+* **view:** 源码模式跟随阅读背景，切换模式不再丢失阅读位置 ([7f2b897](https://github.com/kzheart/Dew/commit/7f2b897575fe31d706b3db7a9099d016a91f9c07))
+
+
+### 性能优化
+
+* **view:** 切换视图与长文档不再卡顿 ([20000f6](https://github.com/kzheart/Dew/commit/20000f60d8375868e62415c1e4238aa76c036215))
+
 ## 0.1.0 (2026-11-03)
 
 首个公开版本。
